@@ -2,7 +2,7 @@ import streamlit as st
 
 def render_sidebar():
     st.sidebar.markdown("<h3 style='color:red;'>新亚超市管理系统</h3>", unsafe_allow_html=True)
-    menu = st.sidebar.radio("数据更新截止2025-04-30", [
+    menu = st.sidebar.radio("数据更新截止2025-05-02", [
         "应付未付账单查询",
         "付款支票信息查询",
         "支票号查询",
