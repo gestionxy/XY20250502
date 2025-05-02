@@ -1,5 +1,9 @@
 import streamlit as st
 from ui.sidebar import render_sidebar
+
+from ui.sidebar import render_sidebar, render_refresh_button
+from modules.data_loader import load_supplier_data  # 你需要创建这个模块
+
 from modules.ap_unpaid import ap_unpaid_query
 from modules.paid_cheques import paid_cheques_query
 from modules.cheque_lookup import cheque_lookup_query
@@ -14,6 +18,11 @@ st.set_page_config(page_title="新亚超市智能管理系统", layout="wide")
 st.markdown("""
     <h2 style='color:#1A5276;'>新亚超市智能管理系统</h2>
 """, unsafe_allow_html=True)
+
+
+# ✅ 手动刷新数据按钮，显示在左侧最上方
+refresh_triggered = render_refresh_button(load_supplier_data)
+
 
 # 左侧导航
 selected = render_sidebar()
