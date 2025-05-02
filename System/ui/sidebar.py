@@ -23,3 +23,12 @@ def get_selected_departments(df):
         return all_departments
     else:
         return selected_raw
+
+
+def render_refresh_button(load_func):
+    st.sidebar.markdown("### 🔄 数据刷新")
+    if st.sidebar.button("👉 手动刷新数据"):
+        load_func.clear()
+        st.sidebar.success("✅ 已清除缓存，数据将重新加载")
+        return True
+    return False
