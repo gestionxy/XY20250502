@@ -1,7 +1,9 @@
 import pandas as pd
 import streamlit as st
 
-@st.cache_data
+# 加载数据函数，设置缓存时间为 10 秒
+@st.cache_data(ttl=10)
+
 def load_supplier_data():
     # Google Sheet 文件的 ID（你提供的链接）
     file_id = "1qH_odKEPlDrLTM8B8UfsMzW6Uu9ciDUW"
