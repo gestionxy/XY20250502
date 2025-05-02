@@ -159,7 +159,7 @@ def paid_cheques_query():
             )
     
         ax.set_title("按部门分布", fontsize=12, fontproperties=my_font)
-        ax.set_ylabel("金额（元）", fontsize=10, fontproperties=my_font)
+        ax.set_ylabel("金额（$ CAD）", fontsize=10, fontproperties=my_font)
         ax.set_xlabel("部门", fontsize=10, fontproperties=my_font)
         ax.tick_params(axis='x', labelrotation=30, labelsize=9)
         ax.tick_params(axis='y', labelsize=9)
