@@ -121,7 +121,7 @@ def ap_unpaid_query():
         color=[color_map.get(d, '#CCCCCC') for d in bar_df['部门']]
     )
     ax1.set_title("选中部门应付未付差额", fontsize=12, fontproperties=my_font)
-    ax1.set_ylabel("金额（元）", fontproperties=my_font)
+    ax1.set_ylabel("金额（$ CAD）", fontproperties=my_font)
     ax1.tick_params(axis='x', labelrotation=30)
     ax1.set_xticklabels(bar_df['部门'], fontproperties=my_font)
     ax1.set_yticklabels(ax1.get_yticks(), fontproperties=my_font)
