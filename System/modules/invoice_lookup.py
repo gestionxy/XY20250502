@@ -36,7 +36,7 @@ def invoice_lookup_query():
             st.warning("❌ 未找到相关发票号，请检查输入或选择内容。")
         else:
             # ✅ 差额列
-            filtered['差额'] = filtered['实际支付金额'].fillna(0) - filtered['发票金额'].fillna(0)
+            filtered['差额'] = filtered['发票金额'].fillna(0) - filtered['实际支付金额'].fillna(0)
 
             # ✅ 格式化日期列
             for col in ['发票日期', '开支票日期']:
