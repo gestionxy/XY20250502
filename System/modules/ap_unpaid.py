@@ -58,24 +58,10 @@ def ap_unpaid_query():
     }])
     summary_table = pd.concat([summary_table, total_row], ignore_index=True)
 
-    def highlight_total_row(row):
-        if row['部门'] == '总计':
-            return ['background-color: #FADBD8'] * len(row)
-        return [''] * len(row)
-
 
 
     st.markdown("<h4 style='color:#196F3D;'>📋 各部门<span style='color:red;'>应付未付</span>账单金额汇总 </h4>", unsafe_allow_html=True)
-    st.dataframe(
-        summary_table.style
-        .apply(highlight_total_row, axis=1)
-        .format({
-            '发票金额': "{:,.2f}",
-            '实际支付金额': "{:,.2f}",
-            '应付未付差额': "{:,.2f}"
-        }),
-        use_container_width=True
-    )
+    st.dataframe(style_dataframe(summary_table), use_container_width=True)
 
 
     # ✅ 明细表
