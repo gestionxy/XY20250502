@@ -1,16 +1,15 @@
 import streamlit as st
 import pandas as pd
 import matplotlib.pyplot as plt
-import matplotlib
 from io import BytesIO
-from matplotlib import font_manager
+from modules.data_loader import load_supplier_data
 
 # ✅ 加载中文字体以防止图表中出现乱码
 from fonts.fonts import load_chinese_font
 my_font = load_chinese_font()
 
 # ✅ 导入统一的数据加载函数
-from modules.data_loader import load_supplier_data
+
 
 def paid_cheques_query():
     df = load_supplier_data()
@@ -59,6 +58,8 @@ def paid_cheques_query():
         else:
             return [''] * len(row)
 
+    st.info("##### 💡 付款支票信息查询的搜索时间是按照 *📆开支票日期* 进行设置的，方便用户查询某段时间内所开支票的信息")
+    
     # --- 展示“各部门付款汇总”表格 ---
     st.markdown("### 🧾 各部门付款金额汇总")
     st.dataframe(
@@ -83,6 +84,7 @@ def paid_cheques_query():
         filtered.groupby(['部门', '付款支票号', '公司名称'])
         .agg({
             '发票号': lambda x: ",".join(x.dropna().unique()),
+            '开支票日期': 'first',
             '实际支付金额': 'sum',
             'TPS': 'sum',
             'TVQ': 'sum'
@@ -100,6 +102,7 @@ def paid_cheques_query():
         subtotal['付款支票号'] = ''
         subtotal['公司名称'] = ''
         subtotal['发票号'] = ''
+        subtotal['开支票日期'] = ''
         final = pd.concat([final, subtotal], ignore_index=True)
 
     total = summary[['实际支付金额', 'TPS', 'TVQ']].sum().to_frame().T
@@ -107,9 +110,10 @@ def paid_cheques_query():
     total['付款支票号'] = ''
     total['公司名称'] = ''
     total['发票号'] = ''
+    total['开支票日期'] = ''
     final = pd.concat([final, total], ignore_index=True)
 
-    final = final[['部门', '付款支票号', '公司名称', '发票号', '实际支付金额', 'TPS', 'TVQ']]
+    final = final[['部门', '付款支票号', '公司名称', '发票号','开支票日期', '实际支付金额', 'TPS', 'TVQ']]
 
     # 着色：小计和总计行
     def highlight_summary(row):
@@ -122,6 +126,10 @@ def paid_cheques_query():
 
     # --- 展示“付款支票信息”详细表格 ---
     st.markdown("<h3 style='color:#117A65;'>XINYA超市 <span style='color:purple;'>付款支票信息明细</span></h3>", unsafe_allow_html=True)
+    
+    # 先转换一次就好
+    final['开支票日期'] = pd.to_datetime(final['开支票日期'], errors='coerce').dt.date
+    
     st.dataframe(
         final.style
         .apply(highlight_summary, axis=1)
@@ -129,6 +137,7 @@ def paid_cheques_query():
             '实际支付金额': "{:,.2f}",
             'TPS': "{:,.2f}",
             'TVQ': "{:,.2f}"
+            
         }),
         use_container_width=True
     )
@@ -159,7 +168,7 @@ def paid_cheques_query():
             )
     
         ax.set_title("按部门分布", fontsize=12, fontproperties=my_font)
-        ax.set_ylabel("金额（$ CAD）", fontsize=10, fontproperties=my_font)
+        ax.set_ylabel("金额（元）", fontsize=10, fontproperties=my_font)
         ax.set_xlabel("部门", fontsize=10, fontproperties=my_font)
         ax.tick_params(axis='x', labelrotation=30, labelsize=9)
         ax.tick_params(axis='y', labelsize=9)
@@ -173,4 +182,5 @@ def paid_cheques_query():
         buf = BytesIO()
         fig.savefig(buf, format="png", dpi=300)
         st.image(buf.getvalue(), width=600)
+
 

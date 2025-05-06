@@ -9,6 +9,8 @@ from modules.paid_cheques import paid_cheques_query
 from modules.cheque_lookup import cheque_lookup_query
 from modules.invoice_lookup import invoice_lookup_query
 from modules.company_invoice_query import company_invoice_query
+from modules.cheque_ledger_query import cheque_ledger_query
+
 
 
 
@@ -42,5 +44,8 @@ if selected == "发票号查询":
 
 if selected == "按公司查询":
     company_invoice_query()
+
+if selected == "当前支票总账":
+    cheque_ledger_query()
 
 
