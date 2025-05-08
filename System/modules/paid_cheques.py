@@ -125,7 +125,8 @@ def paid_cheques_query():
         return [''] * len(row)
 
     # --- 展示“付款支票信息”详细表格 ---
-    st.markdown("<h3 style='color:#117A65;'>XINYA超市 <span style='color:purple;'>付款支票信息明细</span></h3>", unsafe_allow_html=True)
+    st.info("##### 📝 XINYA超市 *付款支票* 信息明细")
+    #st.markdown("<h3 style='color:#117A65;'>XINYA超市 <span style='color:purple;'>付款支票信息明细</span></h3>", unsafe_allow_html=True)
     
     # 先转换一次就好
     final['开支票日期'] = pd.to_datetime(final['开支票日期'], errors='coerce').dt.date
