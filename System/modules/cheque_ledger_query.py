@@ -36,7 +36,7 @@ def cheque_ledger_query():
     # ✅ 聚合数据：按支票号、部门、公司汇总
     agg_funcs = {
         '公司名称': 'first',
-        '部门': 'first',
+        '部门': lambda x: ','.join(sorted(x.astype(str))),
         '发票号': lambda x: ','.join(sorted(x.astype(str))),
         '发票金额': lambda x: '+'.join(sorted(x.astype(str))),
         '实际支付金额': 'sum',
