@@ -13,6 +13,7 @@ def load_supplier_data():
 
     # 读取 CSV 数据（从 Google Sheets）
     df = pd.read_csv(csv_url)
+    df = df.dropna(how='all')
 
     # 自动转换常用日期字段为 datetime 类型（可按需扩展）
     date_columns = ['开支票日期', '发票日期']
