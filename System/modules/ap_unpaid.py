@@ -124,69 +124,74 @@ def ap_unpaid_query():
 
     st.subheader("📊 各部门应付未付差额图表分析")
 
-    if filtered_time_only.empty or filtered_time_only['发票金额'].sum() == 0:
-        st.info("没有可用于图表的数据（请确认已选择有效时间段和有金额的部门）。")
-        return
 
-    pie_df = filtered_time_only.groupby("部门")[['应付未付差额']].sum().reset_index()
-    bar_df = pie_df[pie_df['部门'].isin(departments)].copy()
+    import plotly.express as px
+    
+    df_unpaid_zhexiantu = load_supplier_data()
 
-    unique_departments = pie_df['部门'].tolist()
-    cmap_colors = plt.get_cmap("tab20").colors
-    color_cycle = cycle(cmap_colors)
-    color_map = {dept: color for dept, color in zip(unique_departments, color_cycle)}
+    # 2. 筛选未付账数据（付款支票号为空）
+    df_unpaid_zhexiantu = df_unpaid_zhexiantu[df_unpaid_zhexiantu['付款支票号'].apply(lambda x: str(x).strip().lower() in ['', 'nan', 'none'])]
 
-    fig, (ax1, ax2) = plt.subplots(1, 2, figsize=(12, 5))
+    # 3. 处理发票日期，转换为 "YYYY-MM" 格式
+    df_unpaid_zhexiantu['月份'] = pd.to_datetime(df_unpaid_zhexiantu['发票日期']).dt.to_period('M').astype(str)
 
-    ax1.bar(
-        bar_df['部门'],
-        bar_df['应付未付差额'],
-        color=[color_map.get(d, '#CCCCCC') for d in bar_df['部门']]
+    # 4. 按部门和月份汇总发票金额
+    unpaid_summary = df_unpaid_zhexiantu.groupby(['部门', '月份'])['发票金额'].sum().reset_index()
+
+    # 5. 生成部门颜色映射，确保三张图颜色一致
+    unique_departments = sorted(unpaid_summary['部门'].unique())
+    colors = px.colors.qualitative.Dark24
+    color_map = {dept: colors[i % len(colors)] for i, dept in enumerate(unique_departments)}
+
+    # 6. 生成交互式折线图
+    fig1 = px.line(
+        unpaid_summary,
+        x="月份",
+        y="发票金额",
+        color="部门",
+        title="各部门每月未付账金额",
+        markers=True,
+        labels={"发票金额": "未付账金额", "月份": "月份"},
+        line_shape="linear",
+        color_discrete_map=color_map
     )
 
-    # ✅ 添加数据标签（整数格式）
-    # 遍历 bar_df 中每一行数据，用于在柱子顶部显示对应的应付未付差额
-    for idx, row in bar_df.iterrows():
-        ax1.text(
-            x=idx,  # 横坐标：柱子的索引位置（第几根柱子）
-            y=row['应付未付差额'],  # 纵坐标：柱子高度，即应付未付差额的值
-            s=f"{int(row['应付未付差额'])}",  # 文本内容：只保留整数，显示在柱子上方
-            ha='center',  # 水平对齐方式：居中显示（horizontal alignment）
-            va='bottom',  # 垂直对齐方式：紧贴柱子顶部（vertical alignment）
-            fontsize=10,  # 字体大小
-            fontproperties=my_font  # 使用预设的中文字体，防止中文乱码
-        )
+    fig1.update_traces(text=unpaid_summary["发票金额"].round(0).astype(int), textposition="top center")
 
+    # 7. 显示折线图
+    #st.title("📊 各部门每月未付账金额分析")
+    st.plotly_chart(fig1)
 
-    ax1.set_title("选中部门应付未付差额", fontsize=12, fontproperties=my_font)
-    ax1.set_ylabel("金额（$ CAD）", fontproperties=my_font)
-    ax1.tick_params(axis='x', labelrotation=30)
-    ax1.set_xticklabels(bar_df['部门'], fontproperties=my_font)
-    ax1.set_yticklabels(ax1.get_yticks(), fontproperties=my_font)
-    ax1.grid(True, axis='y', linestyle='--', alpha=0.4)
-
-    wedges, _, autotexts = ax2.pie(
-        pie_df['应付未付差额'],
-        labels=None,
-        autopct=lambda pct: f'{pct:.1f}%' if pct > 0 else '',
-        startangle=140,
-        colors=[color_map.get(d, '#CCCCCC') for d in pie_df['部门']]
+    # 8. 生成交互式柱状图
+    bar_df = filtered_time_only.groupby("部门")[['应付未付差额']].sum().reset_index()
+    bar_df['应付未付差额'] = bar_df['应付未付差额'].round(0).astype(int)
+    fig_bar = px.bar(
+        bar_df,
+        x="部门",
+        y="应付未付差额",
+        color="部门",
+        title="选中部门应付未付差额",
+        text="应付未付差额",
+        labels={"应付未付差额": "金额（$ CAD）"},
+        color_discrete_map=color_map
     )
-    ax2.set_title("所有部门占总应付差额比例", fontsize=12, fontproperties=my_font)
-    ax2.legend(
-        wedges,
-        pie_df['部门'],
-        title="部门",
-        loc="center left",
-        bbox_to_anchor=(1.0, 0.5),
-        fontsize=9,
-        prop=my_font
+    fig_bar.update_traces(textposition="outside")
+
+    # 9. 生成交互式饼状图
+    fig_pie = px.pie(
+        bar_df,
+        names="部门",
+        values="应付未付差额",
+        title="所有部门占总应付差额比例",
+        labels={"应付未付差额": "金额（$ CAD）"},
+        hole=0.4,
+        color_discrete_map=color_map
     )
-    for autotext in autotexts:
-        autotext.set_fontproperties(my_font)
 
-    plt.tight_layout()
-    st.pyplot(fig)
+    fig_pie.update_traces(marker=dict(colors=[color_map.get(dept, '#CCCCCC') for dept in bar_df['部门']]))
 
+    # 10. 显示柱状图和饼状图
+    st.plotly_chart(fig_bar)
+    st.plotly_chart(fig_pie)
 
 
