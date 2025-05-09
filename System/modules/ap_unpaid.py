@@ -28,8 +28,8 @@ def ap_unpaid_query():
 
     st.sidebar.subheader("筛选条件")
     min_date, max_date = df['发票日期'].min(), df['发票日期'].max()
-    start_date = st.sidebar.date_input("开始日期", value=min_date, min_value=min_date, max_value=max_date)
-    end_date = st.sidebar.date_input("结束日期", value=max_date, min_value=min_date, max_value=max_date)
+    start_date = st.sidebar.date_input("开始日期", value=min_date)
+    end_date = st.sidebar.date_input("结束日期", value=max_date)
     departments = get_selected_departments(df)
 
     # ✅ 饼图：只过滤时间，不筛选部门
