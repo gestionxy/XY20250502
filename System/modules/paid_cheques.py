@@ -144,45 +144,112 @@ def paid_cheques_query():
         use_container_width=True
     )
 
-    
-    # 图表部分
-    chart_df = summary.groupby('部门')[['实际支付金额']].sum().reset_index()
-    
-    if not chart_df.empty:
-        st.markdown("### <span style='font-size:18px;'>📊 各部门实际支付金额柱状图</span>", unsafe_allow_html=True)
-    
-        fig, ax = plt.subplots(figsize=(7, 4))
-        cmap = plt.get_cmap("Set3")
-        colors = [cmap(i % 12) for i in range(len(chart_df))]
-        bars = ax.bar(chart_df['部门'], chart_df['实际支付金额'], color=colors)
-    
-        # 添加金额标签
-        for bar in bars:
-            height = bar.get_height()
-            ax.text(
-                bar.get_x() + bar.get_width() / 2,
-                height + max(chart_df['实际支付金额']) * 0.01,
-                f"{int(height):,}",
-                ha='center',
-                va='bottom',
-                fontsize=10,
-                fontproperties=my_font  # ✅ 显式指定中文字体
-            )
-    
-        ax.set_title("按部门分布", fontsize=12, fontproperties=my_font)
-        ax.set_ylabel("金额（元）", fontsize=10, fontproperties=my_font)
-        ax.set_xlabel("部门", fontsize=10, fontproperties=my_font)
-        ax.tick_params(axis='x', labelrotation=30, labelsize=9)
-        ax.tick_params(axis='y', labelsize=9)
-        ax.set_xticklabels(chart_df['部门'], fontproperties=my_font)
-        ax.set_yticklabels(ax.get_yticks(), fontproperties=my_font)
-    
-        ax.grid(True, axis='y', linestyle='--', alpha=0.4)
-        plt.tight_layout()
-    
-        # 渲染高清图像
-        buf = BytesIO()
-        fig.savefig(buf, format="png", dpi=300)
-        st.image(buf.getvalue(), width=600)
+    import plotly.express as px
+    from datetime import timedelta
 
+    import plotly.express as px
+
+    from datetime import timedelta
+
+
+    # 1. 读取数据
+    df_paid_cheques = load_supplier_data()
+
+    # 2. 数据清理
+    df_paid_cheques['实际支付金额'] = pd.to_numeric(df_paid_cheques['实际支付金额'], errors='coerce')
+    df_paid_cheques['开支票日期'] = pd.to_datetime(df_paid_cheques['开支票日期'], errors='coerce')
+    df_paid_cheques = df_paid_cheques.dropna(subset=['开支票日期', '实际支付金额'])
+
+    # 3. 去重
+    #df_paid_cheques = df_paid_cheques.drop_duplicates(subset=['付款支票号', '实际支付金额', '开支票日期'])
+
+    # 4. 过滤有效数据
+    paid_df = df_paid_cheques[df_paid_cheques['实际支付金额'].notna()]
+
+    # 5. 按开支票日期的月份汇总
+    paid_df['月份'] = pd.to_datetime(paid_df['开支票日期']).dt.to_period('M').astype(str)
+    paid_summary = paid_df.groupby(['部门', '月份'])['实际支付金额'].sum().reset_index()
+    monthly_totals = paid_df.groupby('月份')['实际支付金额'].sum().reset_index()
+    monthly_totals_dict = monthly_totals.set_index('月份')['实际支付金额'].to_dict()
+
+    # 7. 生成部门颜色映射
+    unique_departments_paid = sorted(paid_summary['部门'].unique())
+    colors_paid = px.colors.qualitative.Dark24
+    color_map_paid = {dept: colors_paid[i % len(colors_paid)] for i, dept in enumerate(unique_departments_paid)}
+
+    # 8. 添加提示信息
+    paid_summary['总支付金额'] = paid_summary['月份'].map(monthly_totals_dict)
+    paid_summary['提示信息'] = paid_summary.apply(
+        lambda row: f"所选月份总支付金额：{monthly_totals_dict[row['月份']]:,.0f}<br>部门：{row['部门']}<br>实际付款金额：{row['实际支付金额']:,.0f}",
+        axis=1
+    )
+
+    # 9. 绘制月度折线图
+    fig_paid_month = px.line(
+        paid_summary,
+        x="月份",
+        y="实际支付金额",
+        color="部门",
+        title="各部门每月实际付款金额",
+        markers=True,
+        labels={"实际支付金额": "实际付款金额", "月份": "月份"},
+        line_shape="linear",
+        color_discrete_map=color_map_paid,
+        hover_data={'提示信息': True}
+    )
+
+    fig_paid_month.update_traces(
+        text=paid_summary["实际支付金额"].round(0).astype(int),
+        textposition="top center",
+        hovertemplate="%{customdata[0]}"
+    )
+
+    # 10. 显示图表
+    st.title("📊 各部门每月实际付款金额分析")
+    st.plotly_chart(fig_paid_month, key="monthly_paid_chart001")
+
+    # 11. 周度分析（可选）
+    valid_months = sorted(paid_df['月份'].unique())
+    selected_month = st.selectbox("选择查看具体周数据的月份", valid_months)
+
+    # 12. 按周统计
+    paid_df['周开始'] = paid_df['开支票日期'] - pd.to_timedelta(paid_df['开支票日期'].dt.weekday, unit='D')
+    paid_df['周结束'] = paid_df['周开始'] + timedelta(days=6)
+    paid_df['周范围'] = paid_df['周开始'].dt.strftime('%Y-%m-%d') + ' ~ ' + paid_df['周结束'].dt.strftime('%Y-%m-%d')
+
+    weekly_summary_filtered = paid_df[paid_df['月份'] == selected_month].groupby(
+        ['部门', '周范围', '周开始', '周结束']
+    )['实际支付金额'].sum().reset_index()
+
+    weekly_summary_filtered['周开始'] = pd.to_datetime(weekly_summary_filtered['周开始'])
+    weekly_summary_filtered = weekly_summary_filtered.sort_values(by='周开始').reset_index(drop=True)
+
+    weekly_totals = weekly_summary_filtered.groupby('周范围')['实际支付金额'].sum().reset_index()
+    weekly_totals_dict = weekly_totals.set_index('周范围')['实际支付金额'].to_dict()
+
+    weekly_summary_filtered['提示信息'] = weekly_summary_filtered.apply(
+        lambda row: f"所选周总支付金额：{weekly_totals_dict[row['周范围']]:,.0f}<br>部门：{row['部门']}<br>实际付款金额：{row['实际支付金额']:,.0f}",
+        axis=1
+    )
+
+    fig_paid_week = px.line(
+        weekly_summary_filtered,
+        x="周范围",
+        y="实际支付金额",
+        color="部门",
+        title=f"{selected_month} 每周各部门实际付款金额",
+        markers=True,
+        labels={"实际支付金额": "实际付款金额", "周范围": "周"},
+        line_shape="linear",
+        color_discrete_map=color_map_paid,
+        hover_data={'提示信息': True}
+    )
+
+    fig_paid_week.update_traces(
+        text=weekly_summary_filtered["实际支付金额"].round(0).astype(int),
+        textposition="top center",
+        hovertemplate="%{customdata[0]}"
+    )
+
+    st.plotly_chart(fig_paid_week, key="weekly_paid_chart001")
 

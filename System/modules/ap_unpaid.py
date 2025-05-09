@@ -126,41 +126,161 @@ def ap_unpaid_query():
 
 
     import plotly.express as px
-    
+
+    from datetime import timedelta
+
+    # 1. 读取数据
     df_unpaid_zhexiantu = load_supplier_data()
 
-    # 2. 筛选未付账数据（付款支票号为空）
-    df_unpaid_zhexiantu = df_unpaid_zhexiantu[df_unpaid_zhexiantu['付款支票号'].apply(lambda x: str(x).strip().lower() in ['', 'nan', 'none'])]
+    # 2. 数据清理
+    # !!!XXX筛选未付款记录（付款支票号为空）
+    # 筛选未付款记录（付款支票号为空），不能直接使用 支票号 作为 排除选项， 以为有的公司是直接 支票先行转账，所以发票是0，而实际支付金额是10000， 存在支票号982/989，直接使用 支票号进行筛选是错误的
+    # 正确的做法是新建一列 【实际差额】列，进行计算实际上没有付款的金额
+    #df_unpaid_zhexiantu = df_unpaid_zhexiantu[
+        #df_unpaid_zhexiantu['付款支票号'].apply(lambda x: str(x).strip().lower() in ['', 'nan', 'none'])
+    #]
 
-    # 3. 处理发票日期，转换为 "YYYY-MM" 格式
-    df_unpaid_zhexiantu['月份'] = pd.to_datetime(df_unpaid_zhexiantu['发票日期']).dt.to_period('M').astype(str)
+    # 将发票金额和实际支付金额转换为数值，处理非数值和空值
+    df_unpaid_zhexiantu['发票金额'] = pd.to_numeric(df_unpaid_zhexiantu['发票金额'], errors='coerce').fillna(0)
+    df_unpaid_zhexiantu['实际支付金额'] = pd.to_numeric(df_unpaid_zhexiantu['实际支付金额'], errors='coerce').fillna(0)
 
-    # 4. 按部门和月份汇总发票金额
-    unpaid_summary = df_unpaid_zhexiantu.groupby(['部门', '月份'])['发票金额'].sum().reset_index()
+    # 计算实际差额（未付款金额）
+    df_unpaid_zhexiantu['实际差额'] = df_unpaid_zhexiantu['发票金额'] - df_unpaid_zhexiantu['实际支付金额']
 
-    # 5. 生成部门颜色映射，确保三张图颜色一致
+    # 处理发票日期，转换为 datetime 格式
+    df_unpaid_zhexiantu['发票日期'] = pd.to_datetime(df_unpaid_zhexiantu['发票日期'], errors='coerce')
+    #df_unpaid_zhexiantu = df_unpaid_zhexiantu.dropna(subset=['发票日期', '实际差额'])
+
+    # 3. 去重（基于发票号、发票日期、实际差额）
+    #df_unpaid_zhexiantu = df_unpaid_zhexiantu.drop_duplicates(subset=['发票号', '发票日期', '实际差额'])
+
+    # 4. 按月份分配（用于月度分析和周度过滤）
+    df_unpaid_zhexiantu['月份'] = df_unpaid_zhexiantu['发票日期'].dt.to_period('M').astype(str)
+
+    # 5. 按部门和月份汇总未付款金额
+    unpaid_summary = df_unpaid_zhexiantu.groupby(['部门', '月份'])['实际差额'].sum().reset_index()
+
+    # 6. 计算月度总未付款金额
+    monthly_totals = df_unpaid_zhexiantu.groupby('月份')['实际差额'].sum().reset_index()
+    monthly_totals_dict = monthly_totals.set_index('月份')['实际差额'].to_dict()
+
+    # 7. 生成部门颜色映射
     unique_departments = sorted(unpaid_summary['部门'].unique())
     colors = px.colors.qualitative.Dark24
     color_map = {dept: colors[i % len(colors)] for i, dept in enumerate(unique_departments)}
 
-    # 6. 生成交互式折线图
-    fig1 = px.line(
+    # 8. 添加月度提示信息
+    unpaid_summary['总未付金额'] = unpaid_summary['月份'].map(monthly_totals_dict)
+    unpaid_summary['提示信息'] = unpaid_summary.apply(
+        lambda row: f"所选月份总未付金额：{monthly_totals_dict[row['月份']]:,.0f}<br>部门：{row['部门']}<br>未付金额：{row['实际差额']:,.0f}",
+        axis=1
+    )
+
+    # 9. 绘制月度折线图
+    fig_month = px.line(
         unpaid_summary,
         x="月份",
-        y="发票金额",
+        y="实际差额",
         color="部门",
         title="各部门每月未付账金额",
         markers=True,
-        labels={"发票金额": "未付账金额", "月份": "月份"},
+        labels={"实际差额": "未付账金额", "月份": "月份"},
         line_shape="linear",
-        color_discrete_map=color_map
+        color_discrete_map=color_map,
+        hover_data={'提示信息': True}
     )
 
-    fig1.update_traces(text=unpaid_summary["发票金额"].round(0).astype(int), textposition="top center")
+    fig_month.update_traces(
+        text=unpaid_summary["实际差额"].round(0).astype(int),
+        textposition="top center",
+        hovertemplate="%{customdata[0]}"
+    )
 
-    # 7. 显示折线图
+    # 10. 显示月度图表
     #st.title("📊 各部门每月未付账金额分析")
-    st.plotly_chart(fig1)
+    st.plotly_chart(fig_month, key="monthly_unpaid_chart001")
+
+    # 11. 周度分析
+    # 添加周范围（周一到周日）
+    df_unpaid_zhexiantu['周开始'] = df_unpaid_zhexiantu['发票日期'] - pd.to_timedelta(df_unpaid_zhexiantu['发票日期'].dt.weekday, unit='D')
+    df_unpaid_zhexiantu['周结束'] = df_unpaid_zhexiantu['周开始'] + timedelta(days=6)
+    df_unpaid_zhexiantu['周范围'] = df_unpaid_zhexiantu['周开始'].dt.strftime('%Y-%m-%d') + ' ~ ' + df_unpaid_zhexiantu['周结束'].dt.strftime('%Y-%m-%d')
+
+    # 12. 提供月份选择
+    valid_months = sorted(df_unpaid_zhexiantu['月份'].unique())
+    selected_month = st.selectbox("选择查看具体周数据的月份", valid_months)
+
+    # 13. 按周汇总（包含跨月周的完整记录）
+    # 选择所选月份的记录
+    month_data = df_unpaid_zhexiantu[df_unpaid_zhexiantu['月份'] == selected_month]
+
+    # 获取该月份涉及的所有周范围
+    week_ranges = df_unpaid_zhexiantu[
+        (df_unpaid_zhexiantu['发票日期'].dt.to_period('M').astype(str) == selected_month) |
+        (df_unpaid_zhexiantu['周开始'].dt.to_period('M').astype(str) == selected_month) |
+        (df_unpaid_zhexiantu['周结束'].dt.to_period('M').astype(str) == selected_month)
+    ]['周范围'].unique()
+
+    # 按周汇总（基于发票日期在周范围内的记录）
+    weekly_summary_filtered = df_unpaid_zhexiantu[
+        (df_unpaid_zhexiantu['周范围'].isin(week_ranges)) &
+        (df_unpaid_zhexiantu['发票日期'] >= df_unpaid_zhexiantu['周开始']) &
+        (df_unpaid_zhexiantu['发票日期'] <= df_unpaid_zhexiantu['周结束'])
+    ].groupby(
+        ['部门', '周范围', '周开始', '周结束']
+    )['实际差额'].sum().reset_index()
+
+    # 确保按周开始日期排序
+    weekly_summary_filtered['周开始'] = pd.to_datetime(weekly_summary_filtered['周开始'])
+    weekly_summary_filtered = weekly_summary_filtered.sort_values(by='周开始').reset_index(drop=True)
+
+    # 14. 计算周度总未付款金额
+    weekly_totals = weekly_summary_filtered.groupby('周范围')['实际差额'].sum().reset_index()
+    weekly_totals_dict = weekly_totals.set_index('周范围')['实际差额'].to_dict()
+
+    # 15. 验证 2025-04-28 ~ 2025-05-04 周的金额
+    if '2025-04-28 ~ 2025-05-04' in weekly_totals_dict:
+        week_total = weekly_totals_dict['2025-04-28 ~ 2025-05-04']
+        print(f"2025-04-28 ~ 2025-05-04 周未付总金额：{week_total}")
+        week_data = df_unpaid_zhexiantu[
+            (df_unpaid_zhexiantu['发票日期'] >= '2025-04-28') &
+            (df_unpaid_zhexiantu['发票日期'] <= '2025-05-04')
+        ]
+        print("2025-04-28 ~ 2025-05-04 周记录数：", len(week_data))
+        print("2025-04-28 ~ 2025-05-04 周记录明细：", week_data[['部门', '发票日期', '发票号', '实际差额']])
+
+    # 16. 添加周度提示信息
+    weekly_summary_filtered['提示信息'] = weekly_summary_filtered.apply(
+        lambda row: f"所选周总未付金额：{weekly_totals_dict[row['周范围']]:,.0f}<br>部门：{row['部门']}<br>未付金额：{row['实际差额']:,.0f}",
+        axis=1
+    )
+
+    # 17. 绘制周度折线图
+    # 确保 X 轴按时间顺序排列
+    fig_week = px.line(
+        weekly_summary_filtered,
+        x="周范围",
+        y="实际差额",
+        color="部门",
+        title=f"{selected_month} 每周各部门未付账金额",
+        markers=True,
+        labels={"实际差额": "未付账金额", "周范围": "周"},
+        line_shape="linear",
+        color_discrete_map=color_map,
+        hover_data={'提示信息': True},
+        category_orders={"周范围": weekly_summary_filtered['周范围'].tolist()}  # 明确指定 X 轴顺序
+    )
+
+    fig_week.update_traces(
+        text=weekly_summary_filtered["实际差额"].round(0).astype(int),
+        textposition="top center",
+        hovertemplate="%{customdata[0]}"
+    )
+
+    # 18. 显示周度图表
+    st.plotly_chart(fig_week, key="weekly_unpaid_chart001")
+
+
 
     # 8. 生成交互式柱状图
     bar_df = filtered_time_only.groupby("部门")[['应付未付差额']].sum().reset_index()
@@ -193,5 +313,6 @@ def ap_unpaid_query():
     # 10. 显示柱状图和饼状图
     st.plotly_chart(fig_bar)
     st.plotly_chart(fig_pie)
+
 
 
