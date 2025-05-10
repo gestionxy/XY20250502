@@ -210,7 +210,7 @@ def paid_cheques_query():
 
     # 11. 周度分析（可选）
     valid_months = sorted(paid_df['月份'].unique())
-    selected_month = st.selectbox("选择查看具体周数据的月份", valid_months)
+    selected_month = st.selectbox("🔎选择查看具体周数据的月份", valid_months)
 
     # 12. 按周统计
     paid_df['周开始'] = paid_df['开支票日期'] - pd.to_timedelta(paid_df['开支票日期'].dt.weekday, unit='D')
