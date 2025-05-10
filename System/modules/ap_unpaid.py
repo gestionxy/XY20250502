@@ -208,7 +208,7 @@ def ap_unpaid_query():
 
     # 12. 提供月份选择
     valid_months = sorted(df_unpaid_zhexiantu['月份'].unique())
-    selected_month = st.selectbox("选择查看具体周数据的月份", valid_months)
+    selected_month = st.selectbox("🔎选择查看具体周数据的月份", valid_months)
 
     # 13. 按周汇总（包含跨月周的完整记录）
     # 选择所选月份的记录
