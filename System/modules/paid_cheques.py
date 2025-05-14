@@ -208,48 +208,75 @@ def paid_cheques_query():
     st.title("📊 各部门每月实际付款金额分析")
     st.plotly_chart(fig_paid_month, key="monthly_paid_chart001")
 
+
+
+
     # 11. 周度分析（可选）
-    valid_months = sorted(paid_df['月份'].unique())
+    # 1. 提供月份选择，确保用户可以选择要分析的月份
+    valid_months = sorted(paid_df['月份'].unique())  # 获取所有可用的月份并排序
     selected_month = st.selectbox("🔎选择查看具体周数据的月份", valid_months)
 
-    # 12. 按周统计
+    # 2. 计算每个交易日期对应的周范围
+    # - '周开始': 当前日期所在周的星期一
+    # - '周结束': 当前日期所在周的星期日
     paid_df['周开始'] = paid_df['开支票日期'] - pd.to_timedelta(paid_df['开支票日期'].dt.weekday, unit='D')
     paid_df['周结束'] = paid_df['周开始'] + timedelta(days=6)
+
+    # 3. 生成 '周范围' 列，格式为 "YYYY-MM-DD ~ YYYY-MM-DD"
     paid_df['周范围'] = paid_df['周开始'].dt.strftime('%Y-%m-%d') + ' ~ ' + paid_df['周结束'].dt.strftime('%Y-%m-%d')
 
+    # 4. 过滤出所选月份的数据
+    # - 根据 '月份' 筛选数据，确保只显示用户选择的月份
     weekly_summary_filtered = paid_df[paid_df['月份'] == selected_month].groupby(
         ['部门', '周范围', '周开始', '周结束']
     )['实际支付金额'].sum().reset_index()
 
+    # 5. 确保 '周开始' 是 datetime 类型，并进行排序
+    # - 确保数据按时间顺序显示，而不是字符串顺序
     weekly_summary_filtered['周开始'] = pd.to_datetime(weekly_summary_filtered['周开始'])
     weekly_summary_filtered = weekly_summary_filtered.sort_values(by='周开始').reset_index(drop=True)
 
+    # 6. 重新生成 '周范围' 确保顺序正确
+    # - 在 '周开始' 排序后重新生成 '周范围'，避免时间错乱
+    weekly_summary_filtered['周范围'] = weekly_summary_filtered['周开始'].dt.strftime('%Y-%m-%d') + ' ~ ' + weekly_summary_filtered['周结束'].dt.strftime('%Y-%m-%d')
+
+    # 7. 计算每个周的总支付金额
+    # - 用于在 hover 提示信息中显示每个周的总金额
     weekly_totals = weekly_summary_filtered.groupby('周范围')['实际支付金额'].sum().reset_index()
     weekly_totals_dict = weekly_totals.set_index('周范围')['实际支付金额'].to_dict()
 
+    # 8. 添加提示信息
+    # - 为每一行添加提示信息，包括部门名称和实际支付金额
     weekly_summary_filtered['提示信息'] = weekly_summary_filtered.apply(
         lambda row: f"所选周总支付金额：{weekly_totals_dict[row['周范围']]:,.0f}<br>部门：{row['部门']}<br>实际付款金额：{row['实际支付金额']:,.0f}",
         axis=1
     )
 
+    # 9. 绘制折线图
+    # - 使用 Plotly 生成折线图，并设置自定义颜色映射
     fig_paid_week = px.line(
         weekly_summary_filtered,
-        x="周范围",
-        y="实际支付金额",
-        color="部门",
-        title=f"{selected_month} 每周各部门实际付款金额",
-        markers=True,
-        labels={"实际支付金额": "实际付款金额", "周范围": "周"},
-        line_shape="linear",
-        color_discrete_map=color_map_paid,
-        hover_data={'提示信息': True}
+        x="周范围",  # x轴为周范围
+        y="实际支付金额",  # y轴为实际支付金额
+        color="部门",  # 颜色按部门分类
+        title=f"{selected_month} 每周各部门实际付款金额",  # 图表标题
+        markers=True,  # 显示节点标记
+        labels={"实际支付金额": "实际付款金额", "周范围": "周"},  # 设置轴标签
+        line_shape="linear",  # 线条样式
+        color_discrete_map=color_map_paid,  # 自定义颜色映射
+        hover_data={'提示信息': True},  # 设置 hover 提示信息
+        category_orders={"周范围": list(weekly_summary_filtered['周范围'].unique())}  # 强制按时间顺序显示
     )
 
+    # 10. 显示金额标签
+    # - 在每个节点上显示具体的支付金额
     fig_paid_week.update_traces(
-        text=weekly_summary_filtered["实际支付金额"].round(0).astype(int),
-        textposition="top center",
-        hovertemplate="%{customdata[0]}"
+        text=weekly_summary_filtered["实际支付金额"].round(0).astype(int),  # 四舍五入并转换为整数
+        textposition="top center",  # 标签显示位置
+        hovertemplate="%{customdata[0]}"  # 使用自定义 hover 模板
     )
 
+    # 11. 显示折线图
+    # - 将图表嵌入到 Streamlit 页面中
     st.plotly_chart(fig_paid_week, key="weekly_paid_chart001")
 
