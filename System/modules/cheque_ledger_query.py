@@ -71,6 +71,78 @@ def cheque_ledger_query():
 
     grouped = pd.concat([grouped, total_row], ignore_index=True)
 
+
+        # 先构造总计数据字典
+    total_data = {
+        "实际支付金额": round(grouped.loc[grouped['付款支票号'] == '总计', '实际支付金额'].sum(), 2),
+        "TPS": round(grouped.loc[grouped['付款支票号'] == '总计', 'TPS'].sum(), 2),
+        "TVQ": round(grouped.loc[grouped['付款支票号'] == '总计', 'TVQ'].sum(), 2),
+        "税后金额": round(grouped.loc[grouped['付款支票号'] == '总计', '税后金额'].sum(), 2),
+    }
+
+    # 转换为 DataFrame（转置以便更好地展示）
+    #total_df = pd.DataFrame.from_dict(total_data, orient='index', columns=['金额'])
+    #total_df.index.name = '项目'
+
+    # 渲染为表格
+    #st.markdown("#### 💰 总计")
+    #st.table(total_df.style.format({'金额': '{:,.2f}'}))
+
+
+
+    # 构造 HTML + CSS 表格（卡片浮动样式）
+    html = f"""
+    <style>
+        .card {{
+            background-color: #ffffff;
+            padding: 20px;
+            border-radius: 12px;
+            box-shadow: 0 4px 12px rgba(0, 0, 0, 0.08);
+            width: 420px;
+            margin: 30px auto;
+            font-family: "Segoe UI", sans-serif;
+        }}
+        .summary-table {{
+            width: 100%;
+            border-collapse: collapse;
+            font-size: 15px;
+            background-color: #EAF2F8;
+            border-radius: 8px;
+            overflow: hidden;
+        }}
+        .summary-table th {{
+            background-color: #D6EAF8;
+            text-align: left;
+            padding: 10px;
+        }}
+        .summary-table td {{
+            padding: 10px;
+            border-top: 1px solid #D4E6F1;
+            text-align: right;
+        }}
+        .summary-table td:first-child {{
+            text-align: left;
+        }}
+    </style>
+
+    <div class="card">
+        <h3>💰 总计</h3>
+        <table class="summary-table">
+            <tr><th>项目</th><th>金额（元）</th></tr>
+            <tr><td>实际支付金额</td><td>{total_data['实际支付金额']:,.2f}</td></tr>
+            <tr><td>TPS</td><td>{total_data['TPS']:,.2f}</td></tr>
+            <tr><td>TVQ</td><td>{total_data['TVQ']:,.2f}</td></tr>
+            <tr><td>税后金额</td><td>{total_data['税后金额']:,.2f}</td></tr>
+        </table>
+    </div>
+    """
+
+    # 渲染 HTML 内容
+    st.markdown(html, unsafe_allow_html=True)
+    
+    
+
+
     # ✅ 设置样式
     def highlight_total(row):
         if row['付款支票号'] == '总计':
