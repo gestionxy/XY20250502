@@ -69,15 +69,19 @@ def cheque_ledger_query():
         '税后金额': grouped['税后金额'].sum()
     }])
 
-    grouped = pd.concat([grouped, total_row], ignore_index=True)
+    grouped_table = pd.concat([grouped, total_row], ignore_index=True)
 
 
         # 先构造总计数据字典
     total_data = {
-        "实际支付金额": round(grouped.loc[grouped['付款支票号'] == '总计', '实际支付金额'].sum(), 2),
-        "TPS": round(grouped.loc[grouped['付款支票号'] == '总计', 'TPS'].sum(), 2),
-        "TVQ": round(grouped.loc[grouped['付款支票号'] == '总计', 'TVQ'].sum(), 2),
-        "税后金额": round(grouped.loc[grouped['付款支票号'] == '总计', '税后金额'].sum(), 2),
+        #"实际支付金额": round(grouped.loc[grouped['付款支票号'] == '总计', '实际支付金额'].sum(), 2),
+        #"TPS": round(grouped.loc[grouped['付款支票号'] == '总计', 'TPS'].sum(), 2),
+        #"TVQ": round(grouped.loc[grouped['付款支票号'] == '总计', 'TVQ'].sum(), 2),
+        #"税后金额": round(grouped.loc[grouped['付款支票号'] == '总计', '税后金额'].sum(), 2),
+        "实际支付金额": round(grouped['实际支付金额'].sum(), 2),
+        "TPS": round(grouped['TPS'].sum(), 2),
+        "TVQ": round(grouped['TVQ'].sum(), 2),
+        "税后金额": round(grouped['税后金额'].sum(), 2),
     }
 
     # 转换为 DataFrame（转置以便更好地展示）
@@ -150,7 +154,7 @@ def cheque_ledger_query():
         return [''] * len(row)
 
     st.dataframe(
-        grouped.style
+        grouped_table.style
         .apply(highlight_total, axis=1)
         .format({
             #'发票金额': '{:,.2f}',
