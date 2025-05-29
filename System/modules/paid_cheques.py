@@ -180,9 +180,14 @@ def paid_cheques_query():
     # 8. 添加提示信息
     paid_summary['总支付金额'] = paid_summary['月份'].map(monthly_totals_dict)
     paid_summary['提示信息'] = paid_summary.apply(
-        lambda row: f"所选月份总支付金额：{monthly_totals_dict[row['月份']]:,.0f}<br>部门：{row['部门']}<br>实际付款金额：{row['实际支付金额']:,.0f}",
+        lambda row: f"{row['月份'][:4]}年{row['月份'][5:]}月 <br>" 
+                    f"支付总金额：{monthly_totals_dict[row['月份']]:,.0f}<br>"
+                    f"部门：{row['部门']}<br>"
+                    f"付款金额：{row['实际支付金额']:,.0f}<br>"
+                    f"占比：{row['实际支付金额'] / monthly_totals_dict.get(row['月份'], 1):.1%}",
         axis=1
     )
+    
 
     # 9. 绘制月度折线图
     fig_paid_month = px.line(
@@ -214,7 +219,7 @@ def paid_cheques_query():
     # 11. 周度分析（可选）
     # 1. 提供月份选择，确保用户可以选择要分析的月份
     valid_months = sorted(paid_df['月份'].unique())  # 获取所有可用的月份并排序
-    selected_month = st.selectbox("🔎选择查看具体周数据的月份", valid_months)
+    selected_month = st.selectbox("🔎选择查看具体周数据的月份", valid_months, index=len(valid_months) - 1)
 
     # 2. 计算每个交易日期对应的周范围
     # - '周开始': 当前日期所在周的星期一
@@ -248,7 +253,10 @@ def paid_cheques_query():
     # 8. 添加提示信息
     # - 为每一行添加提示信息，包括部门名称和实际支付金额
     weekly_summary_filtered['提示信息'] = weekly_summary_filtered.apply(
-        lambda row: f"所选周总支付金额：{weekly_totals_dict[row['周范围']]:,.0f}<br>部门：{row['部门']}<br>实际付款金额：{row['实际支付金额']:,.0f}",
+        lambda row: f"所选周总支付金额：{weekly_totals_dict[row['周范围']]:,.0f}<br>"
+                    f"部门：{row['部门']}<br>"
+                    f"实际付款金额：{row['实际支付金额']:,.0f}<br>"
+                    f"占比：{row['实际支付金额'] / weekly_totals_dict.get(row['周范围'], 1):.1%}",
         axis=1
     )
 

@@ -169,12 +169,47 @@ def ap_unpaid_query():
     colors = px.colors.qualitative.Dark24
     color_map = {dept: colors[i % len(colors)] for i, dept in enumerate(unique_departments)}
 
-    # 8. 添加月度提示信息
+    # 8. 计算各部门每月的未付款金额汇总
+    
+    # 8.1 汇总每个部门在每个月的未付款金额（实际差额）
+    # - df_unpaid_zhexiantu 是一张原始表，包含未付款数据（按发票记录行）
+    # - groupby(['部门', '月份']) 后按部门和月份分组，统计每组的未付款总额
+    # - reset_index() 是为了将分组后的结果还原成普通表格（DataFrame）
+    unpaid_summary = df_unpaid_zhexiantu.groupby(['部门', '月份'])['实际差额'].sum().reset_index()
+
+
+    # 8.2 构建一个【月份 → 总未付款金额】的字典
+    # - 这是为 hover 提示准备的数据
+    # - 通过 groupby('月份') 对原始表按月份统计“所有部门”的未付总额
+    # - to_dict() 让你能通过 .get('2024-04') 快速访问某月的总未付金额
+    monthly_totals_dict = df_unpaid_zhexiantu.groupby('月份')['实际差额'].sum().to_dict()
+
+
+    # 8.3 构建一个【月份 → 发票总金额】的字典
+    # - 和上面类似，不过这里是“总发票金额”，不是未付款金额
+    # - 之后将用于计算“未付款占发票比例”或显示提示用
+    monthly_invoice_totals_dict = df_unpaid_zhexiantu.groupby('月份')['发票金额'].sum().to_dict()
+
+
+    # 8.4 把每行所对应的“总发票金额”和“总未付款金额”映射进 summary 表中
+    # - unpaid_summary['月份'] 是每行的月份
+    # - .map(字典) 就是快速查找，把对应值放进新列里
+    unpaid_summary['总发票金额'] = unpaid_summary['月份'].map(monthly_invoice_totals_dict)
     unpaid_summary['总未付金额'] = unpaid_summary['月份'].map(monthly_totals_dict)
+
+
+    # 8.5 添加提示信息（HTML格式，用于hover）
     unpaid_summary['提示信息'] = unpaid_summary.apply(
-        lambda row: f"所选月份总未付金额：{monthly_totals_dict[row['月份']]:,.0f}<br>部门：{row['部门']}<br>未付金额：{row['实际差额']:,.0f}",
+        lambda row: f"{row['月份'][:4]}年{row['月份'][5:]}月 发票总金额：{monthly_invoice_totals_dict.get(row['月份'], 0):,.0f}<br>"
+                    f"所选月份总未付金额：{monthly_totals_dict.get(row['月份'], 0):,.0f}<br>"
+                    f"所选月份未付金额比例：{monthly_totals_dict.get(row['月份'], 0) /monthly_invoice_totals_dict.get(row['月份'], 1) :,.1%}<br>"
+                    f"部门：{row['部门']}<br>"
+                    f"未付金额：{row['实际差额']:,.0f}<br>"
+                    f"占比：{row['实际差额'] / monthly_invoice_totals_dict.get(row['月份'], 1):.1%}",
         axis=1
     )
+
+
 
     # 9. 绘制月度折线图
     fig_month = px.line(
@@ -208,7 +243,7 @@ def ap_unpaid_query():
 
     # 12. 提供月份选择
     valid_months = sorted(df_unpaid_zhexiantu['月份'].unique())
-    selected_month = st.selectbox("🔎选择查看具体周数据的月份", valid_months)
+    selected_month = st.selectbox("🔎选择查看具体周数据的月份", valid_months, index=len(valid_months) - 1)
 
     # 13. 按周汇总（包含跨月周的完整记录）
     # 选择所选月份的记录
@@ -234,24 +269,28 @@ def ap_unpaid_query():
     weekly_summary_filtered['周开始'] = pd.to_datetime(weekly_summary_filtered['周开始'])
     weekly_summary_filtered = weekly_summary_filtered.sort_values(by='周开始').reset_index(drop=True)
 
-    # 14. 计算周度总未付款金额
-    weekly_totals = weekly_summary_filtered.groupby('周范围')['实际差额'].sum().reset_index()
-    weekly_totals_dict = weekly_totals.set_index('周范围')['实际差额'].to_dict()
+    # 3. 计算每个周的“总未付款金额”和“总发票金额”
+    weekly_totals_dict = df_unpaid_zhexiantu[
+        df_unpaid_zhexiantu['周范围'].isin(week_ranges)
+    ].groupby('周范围')['实际差额'].sum().to_dict()
 
-    # 15. 验证 2025-04-28 ~ 2025-05-04 周的金额
-    if '2025-04-28 ~ 2025-05-04' in weekly_totals_dict:
-        week_total = weekly_totals_dict['2025-04-28 ~ 2025-05-04']
-        print(f"2025-04-28 ~ 2025-05-04 周未付总金额：{week_total}")
-        week_data = df_unpaid_zhexiantu[
-            (df_unpaid_zhexiantu['发票日期'] >= '2025-04-28') &
-            (df_unpaid_zhexiantu['发票日期'] <= '2025-05-04')
-        ]
-        print("2025-04-28 ~ 2025-05-04 周记录数：", len(week_data))
-        print("2025-04-28 ~ 2025-05-04 周记录明细：", week_data[['部门', '发票日期', '发票号', '实际差额']])
+    weekly_invoice_totals_dict = df_unpaid_zhexiantu[
+        df_unpaid_zhexiantu['周范围'].isin(week_ranges)
+    ].groupby('周范围')['发票金额'].sum().to_dict()
 
-    # 16. 添加周度提示信息
+    # 4. 映射总发票金额和总未付款金额
+    weekly_summary_filtered['总发票金额'] = weekly_summary_filtered['周范围'].map(weekly_invoice_totals_dict)
+    weekly_summary_filtered['总未付金额'] = weekly_summary_filtered['周范围'].map(weekly_totals_dict)
+
+    # 5. 添加 hover 提示信息（HTML 格式）
     weekly_summary_filtered['提示信息'] = weekly_summary_filtered.apply(
-        lambda row: f"所选周总未付金额：{weekly_totals_dict[row['周范围']]:,.0f}<br>部门：{row['部门']}<br>未付金额：{row['实际差额']:,.0f}",
+        lambda row: f"{row['周范围']} 发票总金额：{row['总发票金额']:,.0f}<br>"
+                    #f"{row['周范围']} 发票总金额：{weekly_invoice_totals_dict.get(row['周范围'], 0):,.0f}<br>"
+                    f"所选周 总未付金额：{row['总未付金额']:,.0f}<br>"
+                    f"总未付比例：{row['总未付金额'] / row['总发票金额']:.1%}<br>"
+                    f"部门：{row['部门']}<br>"
+                    f"未付金额：{row['实际差额']:,.0f}<br>"
+                    f"占比：{row['实际差额'] / row['总发票金额']:.1%}",
         axis=1
     )
 
