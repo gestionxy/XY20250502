@@ -10,6 +10,7 @@ from modules.cheque_lookup import cheque_lookup_query
 from modules.invoice_lookup import invoice_lookup_query
 from modules.company_invoice_query import company_invoice_query
 from modules.cheque_ledger_query import cheque_ledger_query
+from modules.cash_refund import cash_refund
 
 
 
@@ -48,4 +49,6 @@ if selected == "按公司查询":
 if selected == "当前支票总账":
     cheque_ledger_query()
 
+if selected == "查询Cash_Refund信息":
+    cash_refund()
 

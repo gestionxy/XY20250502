@@ -180,8 +180,11 @@ def paid_cheques_query():
     # 8. 添加提示信息
     paid_summary['总支付金额'] = paid_summary['月份'].map(monthly_totals_dict)
     paid_summary['提示信息'] = paid_summary.apply(
-        lambda row: f"{row['月份'][:4]}年{row['月份'][5:]}月 <br>" 
+        lambda row: f"🔹 {row['月份'][:4]}年{row['月份'][5:]}月 <br>" 
                     f"支付总金额：{monthly_totals_dict[row['月份']]:,.0f}<br>"
+
+                    f"<br>"
+
                     f"部门：{row['部门']}<br>"
                     f"付款金额：{row['实际支付金额']:,.0f}<br>"
                     f"占比：{row['实际支付金额'] / monthly_totals_dict.get(row['月份'], 1):.1%}",
