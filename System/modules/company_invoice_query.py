@@ -51,7 +51,7 @@ def company_invoice_query():
         final_df = pd.DataFrame()
         for dept, group in df_filtered.groupby('部门'):
             final_df = pd.concat([final_df, group])
-            subtotal = group[['发票金额', '实际支付金额', '差额']].sum().to_frame().T
+            subtotal = group[['发票金额', '实际支付金额','TPS','TVQ', '差额']].sum().to_frame().T
             subtotal['公司名称'] = keyword
             subtotal['部门'] = f"{dept} 汇总"
             subtotal['发票号'] = ''
@@ -61,7 +61,7 @@ def company_invoice_query():
             final_df = pd.concat([final_df, subtotal], ignore_index=True)
 
         # ✅ 添加总计行
-        total = df_filtered[['发票金额', '实际支付金额', '差额']].sum().to_frame().T
+        total = df_filtered[['发票金额', '实际支付金额', 'TPS','TVQ','差额']].sum().to_frame().T
         total['公司名称'] = keyword
         total['部门'] = '总计'
         total['发票号'] = ''
@@ -70,7 +70,7 @@ def company_invoice_query():
         total['开支票日期'] = ''
         final_df = pd.concat([final_df, total], ignore_index=True)
 
-        final_df = final_df[['公司名称', '部门', '发票号', '发票日期', '开支票日期', '付款支票号', '发票金额', '实际支付金额', '差额']]
+        final_df = final_df[['公司名称', '部门', '发票号', '发票日期', '开支票日期', '付款支票号', '发票金额', '实际支付金额', 'TPS','TVQ','差额']]
 
         # ✅ 着色
         def highlight_summary(row):
@@ -96,7 +96,9 @@ def company_invoice_query():
             .format({
                 '发票金额': '{:,.2f}',
                 '实际支付金额': '{:,.2f}',
-                '差额': '{:,.2f}'
+                '差额': '{:,.2f}',
+                'TPS': '{:,.2f}',
+                'TVQ': '{:,.2f}',
             }),
             use_container_width=True
         )

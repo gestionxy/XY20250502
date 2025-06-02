@@ -54,7 +54,13 @@ def cash_refund():
     ).round(2).reset_index()
 
     # ✅ 步骤 6：创建基础汇总（每月的总金额 / TPS / TVQ）
-    core_summary = df_data.groupby('年月')[['总金额', 'TPS', 'TVQ']].sum().round(2).reset_index()
+    #core_summary = df_data.groupby('年月')[['总金额', 'TPS', 'TVQ']].sum().round(2).reset_index()
+    core_summary = df_data.groupby('年月').agg({
+        '支票号': lambda x: ', '.join(sorted(set(x))),  # 去重 + 排序 + 拼接
+        '总金额': 'sum',
+        'TPS': 'sum',
+        'TVQ': 'sum'
+    }).round(2).reset_index()
 
     # ✅ 步骤 7：合并两张表
     merged_summary_nan = pd.merge(core_summary, category_pivot_nan, on='年月', how='outer')
