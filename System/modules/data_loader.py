@@ -32,7 +32,7 @@ def load_supplier_data():
 
 def load_cash_data():
     # Google Sheet 文件的 ID（你提供的链接）
-    file_id = "1G26AeXPjZmAOCDSiGMirBxCGCi_Li-B-"
+    file_id = "1U6Xx5mhzCkjd6l4UQ7rOjFq4WQkNpQEK"
 
     # Google Sheet 的 CSV 导出地址
     csv_url = f"https://docs.google.com/spreadsheets/d/{file_id}/export?format=csv"
@@ -47,16 +47,21 @@ def load_cash_data():
     # ✅ 步骤 2：统一日期和金额格式
     df_data['小票日期'] = pd.to_datetime(df_data['小票日期'], errors='coerce').dt.strftime('%Y-%m-%d')  # 格式化为 yyyy-mm-dd 字符串
     df_data['开票日期'] = pd.to_datetime(df_data['开票日期'], errors='coerce')  # 保持为 datetime 类型以便后续提取年月
+    
+    # 会计核算日期 指 这些现金账 具体放在哪个月份进行处理
+    df_data['会计核算日期'] = pd.to_datetime(df_data['会计核算日期'], errors='coerce') 
 
     # ✅ 保留“开票日期”非空的数据
-    df_data = df_data[df_data['开票日期'].notna()]
+    #df_data = df_data[df_data['开票日期'].notna()]
+    df_data = df_data[df_data['会计核算日期'].notna()]
 
     # ✅ 金额字段转换为浮点并保留两位小数
     for col in ['总金额', 'TPS', 'TVQ', '支票金额']:
         df_data[col] = pd.to_numeric(df_data[col], errors='coerce').round(2)
 
     # ✅ 步骤 3：添加“年月”列（格式：2025-02）
-    df_data['年月'] = df_data['开票日期'].dt.to_period('M').astype(str)
+    #df_data['年月'] = df_data['开票日期'].dt.to_period('M').astype(str)
+    df_data['年月'] = df_data['会计核算日期'].dt.to_period('M').astype(str)
 
     # ✅ 步骤 4 : 添加 净值 列
     # 只要其中任意一个值为 NaN，该行计算出的 '净值' 也会是 NaN。 这是因为在 Pandas 中，任何数值与 NaN 参与运算，结果都将是 NaN。
