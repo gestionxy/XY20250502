@@ -16,7 +16,7 @@ def load_supplier_data():
     df = df.dropna(how='all')
 
     # 自动转换常用日期字段为 datetime 类型（可按需扩展）
-    date_columns = ['开支票日期', '发票日期']
+    date_columns = ['开支票日期', '发票日期','银行对账日期']
     for col in date_columns:
         if col in df.columns:
             df[col] = pd.to_datetime(df[col], errors='coerce')

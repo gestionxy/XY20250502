@@ -2,51 +2,84 @@
 import streamlit as st
 import pandas as pd
 from modules.data_loader import load_supplier_data
-from fonts.fonts import load_chinese_font
-
-my_font = load_chinese_font()
-
 
 def cheque_ledger_query():
     df = load_supplier_data()
-    
-    # 强力过滤 “空值”、"nan" 字符串、空字符串、只含空格的值
+
+    # ✅ 过滤无效支票号
     df = df[df['付款支票号'].apply(lambda x: str(x).strip().lower() not in ['', 'nan', 'none'])]
-
-    # 再转为字符串（如果需要进一步分组）
     df['付款支票号'] = df['付款支票号'].astype(str)
-
-
-
 
     st.subheader("📒 当前支票总账查询")
     st.info("##### 💡 支票信息总账的搜索时间是按照 *🧾发票日期* 进行设置的，查询某个会计日期内的支票信息")
 
-    # ✅ 时间筛选：默认使用全部数据范围
-    min_date, max_date = pd.to_datetime(df['发票日期'], errors='coerce').min(), pd.to_datetime(df['发票日期'], errors='coerce').max()
-    col1, col2 = st.columns(2)
-    start_date = col1.date_input("开始发票日期", value=min_date)
-    end_date = col2.date_input("结束发票日期", value=max_date)
+    # ✅ 财会年度选择器
+    fiscal_options = {
+        "全部": None,
+        "2024年度（2023-08-01 ~ 2024-07-31）": ("2023-08-01", "2024-07-31"),
+        "2025年度（2024-08-01 ~ 2025-07-31）": ("2024-08-01", "2025-07-31"),
+        "2026年度（2025-08-01 ~ 2026-07-31）": ("2025-08-01", "2026-07-31"),
+    }
+    selected_fiscal_year = st.selectbox("📅 选择财会年度（可选）", options=list(fiscal_options.keys()))
 
-    # ✅ 筛选出有付款支票号的数据，并且发票日期在指定范围
-    df = df[df['付款支票号'].notna()]
+    # ✅ 发票日期格式化
     df['发票日期'] = pd.to_datetime(df['发票日期'], errors='coerce')
-    df = df[(df['发票日期'] >= pd.to_datetime(start_date)) & (df['发票日期'] <= pd.to_datetime(end_date))]
 
-    # ✅ 聚合数据：按支票号、部门、公司汇总
+    # ✅ 按财会年度初步筛选
+    if fiscal_options[selected_fiscal_year]:
+        fiscal_start, fiscal_end = fiscal_options[selected_fiscal_year]
+        df = df[
+            (df['发票日期'] >= pd.to_datetime(fiscal_start)) &
+            (df['发票日期'] <= pd.to_datetime(fiscal_end))
+        ]
+
+    # ✅ 获取筛选后的最小/最大日期
+    min_date = df['发票日期'].min()
+    max_date = df['发票日期'].max()
+
+    # ✅ 安全性判断：若无数据则中断后续流程
+    if pd.isna(min_date) or pd.isna(max_date):
+        st.warning("⚠️ 没有符合条件的发票数据，无法进行日期筛选。")
+        return
+
+    # ✅ 日期范围选择（与财会年度无关）
+    col1, col2 = st.columns(2)
+    start_date = col1.date_input("开始发票日期", value=min_date.date())
+    end_date = col2.date_input("结束发票日期", value=max_date.date())
+
+    # ✅ 应用发票日期筛选条件
+    df = df[df['付款支票号'].notna()]
+    df = df[
+        (df['发票日期'] >= pd.to_datetime(start_date)) &
+        (df['发票日期'] <= pd.to_datetime(end_date))
+    ]
+
+    # ✅ 聚合数据
     agg_funcs = {
         '公司名称': 'first',
         '部门': lambda x: ','.join(sorted(x.astype(str))),
         '发票号': lambda x: ','.join(sorted(x.astype(str))),
         '发票金额': lambda x: '+'.join(sorted(x.astype(str))),
+        '银行对账日期': 'first',
         '实际支付金额': 'sum',
         'TPS': 'sum',
-        'TVQ': 'sum'
+        'TVQ': 'sum',
     }
 
     grouped = df.groupby('付款支票号').agg(agg_funcs).reset_index()
+
+    # ✅ 格式化银行对账日期
+    grouped['银行对账日期'] = pd.to_datetime(grouped['银行对账日期'], errors='coerce').dt.strftime('%Y-%m-%d')
+
+    # ✅ 计算税后金额
     grouped['税后金额'] = grouped['实际支付金额'] - grouped['TPS'] - grouped['TVQ']
 
+    # ✅ 银行对账日期选择器
+    valid_dates = sorted(grouped['银行对账日期'].dropna().unique())
+    selected_reconcile_date = st.selectbox("📆 按银行对账日期筛选（可选）", options=["全部"] + valid_dates)
+
+    if selected_reconcile_date != "全部":
+        grouped = grouped[grouped['银行对账日期'] == selected_reconcile_date]
     # ✅ 数值支票号在前、文本支票号在后排序
     def sort_key(val):
         try:
@@ -66,7 +99,8 @@ def cheque_ledger_query():
         '实际支付金额': grouped['实际支付金额'].sum(),
         'TPS': grouped['TPS'].sum(),
         'TVQ': grouped['TVQ'].sum(),
-        '税后金额': grouped['税后金额'].sum()
+        '税后金额': grouped['税后金额'].sum(),
+        '银行对账日期': ''
     }])
 
     grouped_table = pd.concat([grouped, total_row], ignore_index=True)
