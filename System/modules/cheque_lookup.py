@@ -52,10 +52,10 @@ def cheque_lookup_query():
         cheque_input = cheque_input.strip()  # 去掉前后空格
         pattern = re.escape(cheque_input)   # 转义正则特殊字符，确保特殊符号不会被误解释
 
-        # **6.2 执行模糊匹配**
+        # **6.2 执行精确匹配**
         # - contains() 进行模糊查询，忽略大小写
         # - na=False 确保 NaN 不会参与匹配
-        filtered = df[df['付款支票号'].astype(str).str.contains(pattern, case=False, na=False)]
+        filtered = df[df['付款支票号'].astype(str).str.strip() == cheque_input]
 
         # 7. 检查是否找到匹配结果
         if filtered.empty:
