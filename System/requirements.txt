@@ -3,3 +3,4 @@ pandas
 openpyxl  # 用于读取 Excel
 plotly    # 可选，如果你用来画图表
 matplotlib
+xlsxwriter
