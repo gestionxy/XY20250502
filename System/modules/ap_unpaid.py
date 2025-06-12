@@ -61,7 +61,7 @@ def ap_unpaid_query():
 
     st.markdown("""
     <h4 >
-    🧾 <strong>各部门应付未付账单金额汇总</strong>
+    🧾 <strong>各部门应付未付（管理版）账单金额汇总</strong>
     </h4>
     """, unsafe_allow_html=True)
     st.info("##### 💡 应付未付账单是按照🧾发票日期进行筛选设置的")
