@@ -5,6 +5,8 @@ from ui.sidebar import render_sidebar, render_refresh_button
 from modules.data_loader import load_supplier_data  # 你需要创建这个模块
 
 from modules.ap_unpaid import ap_unpaid_query
+from modules.ap_unpaid_compta import ap_unpaid_query_compta
+
 from modules.paid_cheques import paid_cheques_query
 from modules.cheque_lookup import cheque_lookup_query
 from modules.invoice_lookup import invoice_lookup_query
@@ -31,8 +33,12 @@ refresh_triggered = render_refresh_button(load_supplier_data)
 selected = render_sidebar()
 
 # 根据选项运行对应功能
-if selected == "应付未付账单查询":
+if selected == "应付未付账单查询(管理版)":
     ap_unpaid_query()
+
+
+if selected == "应付未付账单查询(会计版)":
+    ap_unpaid_query_compta()
 
 if selected == "付款支票信息查询":
     paid_cheques_query()
