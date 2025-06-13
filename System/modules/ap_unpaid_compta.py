@@ -1,7 +1,5 @@
 import streamlit as st
 import pandas as pd
-import matplotlib.pyplot as plt
-from itertools import cycle
 
 from ui.sidebar import get_selected_departments
 from modules.data_loader import load_supplier_data
@@ -19,7 +17,11 @@ def style_dataframe(df):
     return df.style.apply(highlight_rows, axis=1).format({
         '发票金额': "{:,.2f}",
         '实际支付金额': "{:,.2f}",
-        '应付未付差额': "{:,.2f}"
+        '应付未付差额': "{:,.2f}",
+        'TPS': "{:,.2f}",
+        'TVQ': "{:,.2f}",
+        'Hors Taxes': "{:,.2f}",
+   
     })
 
 # 此版本专用于会计做账使用，以发票日期为准，截止日期以银行对账日期为准，由此计算是在这段时间内完成付款，未完成的按 应付未付进行处理
@@ -70,7 +72,7 @@ def ap_unpaid_query_compta():
 
     # ✅ 部门汇总表
     summary_table = (
-        filtered.groupby('部门')[['发票金额', '实际支付金额', '应付未付差额']]
+        filtered.groupby('部门')[['发票金额', '实际支付金额', '应付未付差额','TPS', 'TVQ',]]
         .sum()
         .reset_index()
     )
@@ -78,9 +80,13 @@ def ap_unpaid_query_compta():
         '部门': '总计',
         '发票金额': summary_table['发票金额'].sum(),
         '实际支付金额': summary_table['实际支付金额'].sum(),
-        '应付未付差额': summary_table['应付未付差额'].sum()
+        '应付未付差额': summary_table['应付未付差额'].sum(),
+        'TPS': summary_table['TPS'].sum(),
+        'TVQ': summary_table['TVQ'].sum(),
     }])
     summary_table = pd.concat([summary_table, total_row], ignore_index=True)
+
+    summary_table['Hors Taxes'] = summary_table['发票金额'] - summary_table['TPS'] - summary_table['TVQ']
 
 
     st.markdown("""
@@ -107,10 +113,10 @@ def ap_unpaid_query_compta():
         # 对每个部门内的公司分组
         for company, df_comp in df_dept.groupby('公司名称'):
             # 拼接当前公司所有明细数据，只保留指定列
-            final = pd.concat([final, df_comp[['部门', '公司名称', '发票号', '发票日期', '发票金额', '实际支付金额', '应付未付差额']]])
+            final = pd.concat([final, df_comp[['部门', '公司名称', '发票号', '发票日期', '发票金额', '实际支付金额', '应付未付差额','TPS','TVQ']]])
         
         # 部门小计：对当前部门的金额字段求和（总额、小计）
-        subtotal = df_dept[['发票金额', '实际支付金额', '应付未付差额']].sum().to_frame().T  # 转置成一行 DataFrame
+        subtotal = df_dept[['发票金额', '实际支付金额', '应付未付差额','TPS','TVQ']].sum().to_frame().T  # 转置成一行 DataFrame
         subtotal['部门'] = f"{dept} 汇总"   # 特殊标识该行为“XX部门 汇总”
         subtotal['公司名称'] = ''           # 小计行无公司
         subtotal['发票号'] = ''             # 小计行无发票号
@@ -118,7 +124,7 @@ def ap_unpaid_query_compta():
         final = pd.concat([final, subtotal], ignore_index=True)  # 拼接至 final 表格
 
     # 所有部门总计：汇总所有金额字段
-    total = filtered[['发票金额', '实际支付金额', '应付未付差额']].sum().to_frame().T
+    total = filtered[['发票金额', '实际支付金额', '应付未付差额','TPS','TVQ']].sum().to_frame().T
     total['部门'] = '总计'            # 标记“总计”行
     total['公司名称'] = ''
     total['发票号'] = ''
@@ -133,14 +139,16 @@ def ap_unpaid_query_compta():
     )
 
     # 步骤 4：按指定字段顺序重新排列列，确保前端显示或导出一致
-    final = final[['部门', '公司名称', '发票号', '发票日期', '发票金额', '实际支付金额', '应付未付差额']]
+    final = final[['部门', '公司名称', '发票号', '发票日期', '发票金额', '实际支付金额', '应付未付差额','TPS','TVQ']]
+
+    final['Hors Taxes'] = final['发票金额'] - final['TPS'].fillna(0) - final['TVQ'].fillna(0)
 
 
 
 
     st.markdown("""
     <h4 >
-    🧾 <strong>新亚超市应付未付账单明细</strong>
+    🧾 <strong>新亚超市应付未付（会计版）账单明细</strong>
     </h4>
     """, unsafe_allow_html=True)
     #st.markdown("<h3 style='color:#1A5276;'>📋 新亚超市<span style='color:red;'>应付未付</span>账单 明细</h3>", unsafe_allow_html=True)

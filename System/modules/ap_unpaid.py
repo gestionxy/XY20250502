@@ -4,10 +4,8 @@ import matplotlib.pyplot as plt
 from itertools import cycle
 
 from ui.sidebar import get_selected_departments
-from fonts.fonts import load_chinese_font
 from modules.data_loader import load_supplier_data
 
-my_font = load_chinese_font()
 
 def style_dataframe(df):
     def highlight_rows(row):
