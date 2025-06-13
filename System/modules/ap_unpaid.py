@@ -24,7 +24,7 @@ def style_dataframe(df):
 def ap_unpaid_query():
     df = load_supplier_data()
 
-    st.sidebar.subheader("筛选条件")
+    st.sidebar.subheader("发票日期-筛选条件")
     min_date, max_date = df['发票日期'].min(), df['发票日期'].max()
     start_date = st.sidebar.date_input("开始日期", value=min_date)
     end_date = st.sidebar.date_input("结束日期", value=max_date)
@@ -63,6 +63,7 @@ def ap_unpaid_query():
     </h4>
     """, unsafe_allow_html=True)
     st.info("##### 💡 应付未付账单是按照🧾发票日期进行筛选设置的")
+    st.info("###### 适用于管理层使用，支票开出 即默认现金支付已发生（无论对方是否支取/入账），我方已完成付款。")
     #st.markdown("<h4 style='color:#196F3D;'>📋 各部门<span style='color:red;'>应付未付</span>账单金额汇总 </h4>", unsafe_allow_html=True)
     st.dataframe(style_dataframe(summary_table), use_container_width=True)
 

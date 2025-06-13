@@ -34,13 +34,19 @@ def ap_unpaid_query_compta():
     df['银行对账日期'] = pd.to_datetime(df['银行对账日期'], errors='coerce')  # 保持为 datetime 类型以便后续提取年月
 
 
-    st.sidebar.subheader("筛选条件")
+    st.sidebar.subheader("发票日期-筛选条件")
     min_date, max_date = df['发票日期'].min(), df['发票日期'].max()
     start_date = st.sidebar.date_input("开始日期", value=min_date)
     end_date = st.sidebar.date_input("结束日期", value=max_date)
     departments = get_selected_departments(df)
 
 
+
+
+    #  提示：如只想找 会计版 2024-08-01  -  2024-09-24 期间的 会计应付未付账
+    # 1 --> 先筛选 发票日期 落在这个时间区间内的数据
+    # 2 --> 再【剔除】 银行对账日期 存在数据 且 落在这个时间区间内的数据
+    # 3 --> 将 【实际支付金额】赋值填充为0，既然在这个时间段内不存在银行对账日期，那么我们默认该笔账单未支付！
 
     # 第一步：先按发票日期范围过滤
     mask_invoice_range = (df['发票日期'] >= pd.to_datetime(start_date)) & \
@@ -51,8 +57,9 @@ def ap_unpaid_query_compta():
     mask_bank_match = df_filtered['银行对账日期'].notna() & \
                     (df_filtered['银行对账日期'] >= pd.to_datetime(start_date)) & \
                     (df_filtered['银行对账日期'] <= pd.to_datetime(end_date))
-
     df = df_filtered[~mask_bank_match].reset_index(drop=True)
+    
+    # 第三步：将实际支付金额赋值为0
     df['实际支付金额'] = 0
 
 
@@ -94,6 +101,11 @@ def ap_unpaid_query_compta():
     🧾 <strong>各部门应付未付账单（会计版）金额汇总</strong>
     </h4>
     """, unsafe_allow_html=True)
+
+    #  提示：如只想找 会计版 2024-08-01  -  2024-09-24 期间的 会计应付未付账
+    # 1 --> 先筛选 发票日期 落在这个时间区间内的数据
+    # 2 --> 再【剔除】 银行对账日期 存在数据 且 落在这个时间区间内的数据
+    # 3 --> 将 【实际支付金额】赋值填充为0，既然在这个时间段内不存在银行对账日期，那么我们默认该笔账单未支付！
     st.info("##### 💡 应付未付（会计版）账单是按照🧾发票日期进行筛选设置的，并且按照 银行对账单日期 作为实际付款日期")
     #st.markdown("<h4 style='color:#196F3D;'>📋 各部门<span style='color:red;'>应付未付</span>账单金额汇总 </h4>", unsafe_allow_html=True)
     st.dataframe(style_dataframe(summary_table), use_container_width=True)
