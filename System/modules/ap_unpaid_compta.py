@@ -128,13 +128,14 @@ def ap_unpaid_query_compta():
         # 对每个部门内的公司分组
         for company, df_comp in df_dept.groupby('公司名称'):
             # 拼接当前公司所有明细数据，只保留指定列
-            final = pd.concat([final, df_comp[['部门', '公司名称', '发票号', '发票日期', '发票金额', '实际支付金额', '应付未付差额','TPS','TVQ']]])
+            final = pd.concat([final, df_comp[['部门', '公司名称', '发票号', '发票日期', '发票金额','付款支票号', '实际支付金额', '应付未付差额','TPS','TVQ']]])
         
         # 部门小计：对当前部门的金额字段求和（总额、小计）
         subtotal = df_dept[['发票金额', '实际支付金额', '应付未付差额','TPS','TVQ']].sum().to_frame().T  # 转置成一行 DataFrame
         subtotal['部门'] = f"{dept} 汇总"   # 特殊标识该行为“XX部门 汇总”
         subtotal['公司名称'] = ''           # 小计行无公司
         subtotal['发票号'] = ''             # 小计行无发票号
+        subtotal['付款支票号'] = '' 
         subtotal['发票日期'] = pd.NaT       # 小计行不设日期，用 pd.NaT 保持类型一致
         final = pd.concat([final, subtotal], ignore_index=True)  # 拼接至 final 表格
 
@@ -143,6 +144,7 @@ def ap_unpaid_query_compta():
     total['部门'] = '总计'            # 标记“总计”行
     total['公司名称'] = ''
     total['发票号'] = ''
+    total['付款支票号'] = ''
     total['发票日期'] = pd.NaT        # 同样用 NaT 表示“无日期”
     final = pd.concat([final, total], ignore_index=True)
 
@@ -154,7 +156,7 @@ def ap_unpaid_query_compta():
     )
 
     # 步骤 4：按指定字段顺序重新排列列，确保前端显示或导出一致
-    final = final[['部门', '公司名称', '发票号', '发票日期', '发票金额', '实际支付金额', '应付未付差额','TPS','TVQ']]
+    final = final[['部门', '公司名称', '发票号', '发票日期', '发票金额', '付款支票号','实际支付金额', '应付未付差额','TPS','TVQ']]
 
     final['Hors Taxes'] = final['发票金额'] - final['TPS'].fillna(0) - final['TVQ'].fillna(0)
 
