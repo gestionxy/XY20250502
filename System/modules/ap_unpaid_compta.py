@@ -29,6 +29,9 @@ def ap_unpaid_query_compta():
     
     df = load_supplier_data()
 
+    # 保留“付款支票号”不是以字母开头的行，仅保留 支票号信息
+    #df = df[~df['付款支票号'].astype(str).str.match(r'^[A-Za-z]')]
+
     # 在此处进行数据数据赋值，因为是 会计做账使用，因此 我们按照 发票日期 和 银行对账日期 进行操作
     # 首先规范 df 银行对账日期 的时间格式，方便之后进行操作
     df['银行对账日期'] = pd.to_datetime(df['银行对账日期'], errors='coerce')  # 保持为 datetime 类型以便后续提取年月
