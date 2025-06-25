@@ -121,6 +121,7 @@ def ap_unpaid_query_compta():
 
     # 银行对账日期更新（目标公司）
     df.loc[mask_target, '银行对账日期'] = df.loc[mask_target, '银行过账日期'].apply(calculate_reconcile_date)
+    
 
     # -------------------------------
    # -------------------------------
@@ -159,7 +160,7 @@ def ap_unpaid_query_compta():
     )
     
     #st.info("##### 💡 xxxx（会计版）")
-    #st.dataframe(style_dataframe(df), use_container_width=True)
+    st.dataframe(style_dataframe(df), use_container_width=True)
 
 
 
@@ -190,6 +191,43 @@ def ap_unpaid_query_compta():
         df['发票日期'] <= pd.to_datetime(end_date)
     )
 
+
+
+    # 银行对账日期存在（非空）
+    mask_bank_date_exists = df['银行对账日期'].notna()
+
+    # 银行对账日期不在发票日期范围内
+    mask_bank_not_in_range = (
+        (df['银行对账日期'] >= pd.to_datetime(start_date)) &
+        (df['银行对账日期'] <= pd.to_datetime(end_date))
+    )
+
+    # 最终筛选：银行对账日期存在 且 不在发票日期范围
+    mask_final = mask_bank_date_exists & mask_bank_not_in_range
+
+    # 更新“实际支付金额” 为 发票金额
+    df.loc[mask_final, '实际支付金额'] = df.loc[mask_final, '发票金额']
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+    
+    # 更新“实际支付金额”为“发票金额”，前提是银行对账日期在指定范围内
+    # 前一步将Saputo【mask_target】这一类的公司自动设置银行对账日期，现在要根据银行对账日期调整其实际支付
+    # 如果银行对账日期落在用户选定的范围，则默认实际已支付， 实际支付金额 == 发票金额
+    #df.loc[mask_target & mask_invoice_range, '实际支付金额'] = df.loc[mask_target & mask_invoice_range, '发票金额']
+
+    
     # 生成筛选结果子集
     df_filtered = df[mask_invoice_range].copy()
 
@@ -256,6 +294,8 @@ def ap_unpaid_query_compta():
         .sum()
         .reset_index()
     )
+
+
     total_row = pd.DataFrame([{
         '部门': '总计',
         '发票金额': summary_table['发票金额'].sum(),
@@ -266,7 +306,7 @@ def ap_unpaid_query_compta():
     }])
     summary_table = pd.concat([summary_table, total_row], ignore_index=True)
 
-    summary_table['Hors Taxes'] = summary_table['发票金额'] - summary_table['TPS'] - summary_table['TVQ']
+    summary_table['Hors Taxes'] = summary_table['应付未付差额'] - summary_table['TPS'] - summary_table['TVQ']
 
 
     st.markdown("""
