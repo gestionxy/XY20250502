@@ -6,6 +6,7 @@ from datetime import datetime
 from modules.data_loader import load_supplier_data
 
 def cheque_ledger_query():
+    
     df = load_supplier_data()
 
     # ✅ 过滤无效支票号
@@ -13,50 +14,22 @@ def cheque_ledger_query():
     df['付款支票号'] = df['付款支票号'].astype(str)
 
     st.subheader("📒 当前支票总账查询")
-    st.info("##### 💡 支票信息总账的搜索时间是按照 *🧾发票日期* 进行设置的，查询某个会计日期内的支票信息")
+    #st.info("##### 💡 支票信息总账的搜索时间是按照 *🧾发票日期* 进行设置的，查询某个会计日期内的支票信息")
 
-    # ✅ 财会年度选择器
-    fiscal_options = {
-        "全部": None,
-        "2024年度（2023-08-01 ~ 2024-07-31）": ("2023-08-01", "2024-07-31"),
-        "2025年度（2024-08-01 ~ 2025-07-31）": ("2024-08-01", "2025-07-31"),
-        "2026年度（2025-08-01 ~ 2026-07-31）": ("2025-08-01", "2026-07-31"),
-    }
-    selected_fiscal_year = st.selectbox("📅 选择财会年度（可选）", options=list(fiscal_options.keys()))
 
-    # ✅ 发票日期格式化
+    # ✅ 日期标准化
     df['发票日期'] = pd.to_datetime(df['发票日期'], errors='coerce')
 
-    if fiscal_options[selected_fiscal_year]:
-        fiscal_start, fiscal_end = fiscal_options[selected_fiscal_year]
-        df = df[
-            (df['发票日期'] >= pd.to_datetime(fiscal_start)) &
-            (df['发票日期'] <= pd.to_datetime(fiscal_end))
-        ]
 
-    min_date = df['发票日期'].min()
-    max_date = df['发票日期'].max()
-
-    if pd.isna(min_date) or pd.isna(max_date):
-        st.warning("⚠️ 没有符合条件的发票数据，无法进行日期筛选。")
-        return
-
-    col1, col2 = st.columns(2)
-    start_date = col1.date_input("开始发票日期", value=min_date.date())
-    end_date = col2.date_input("结束发票日期", value=max_date.date())
-
-    df = df[df['付款支票号'].notna()]
-    df = df[
-        (df['发票日期'] >= pd.to_datetime(start_date)) &
-        (df['发票日期'] <= pd.to_datetime(end_date))
-    ]
 
     agg_funcs = {
         '公司名称': 'first',
-        '部门': lambda x: ','.join(sorted(x.astype(str))),
+        #'部门': lambda x: ','.join(sorted(x.astype(str))),
+        '部门': 'first',
         '发票号': lambda x: ','.join(sorted(x.astype(str))),
         '发票金额': lambda x: '+'.join(sorted(x.astype(str))),
         '银行对账日期': 'first',
+        '开支票日期': 'first',
         '实际支付金额': 'sum',
         'TPS': 'sum',
         'TVQ': 'sum',
@@ -65,65 +38,103 @@ def cheque_ledger_query():
     grouped = df.groupby('付款支票号').agg(agg_funcs).reset_index()
 
     grouped['银行对账日期'] = pd.to_datetime(grouped['银行对账日期'], errors='coerce').dt.strftime('%Y-%m-%d')
+    grouped['开支票日期'] = pd.to_datetime(grouped['开支票日期'], errors='coerce').dt.strftime('%Y-%m-%d')
     grouped['税后金额'] = grouped['实际支付金额'] - grouped['TPS'] - grouped['TVQ']
 
-    # ✅ 日期筛选 + 下载按钮并排显示
-    col_a, col_b = st.columns([2, 1])
-    with col_a:
-        valid_dates = sorted(grouped['银行对账日期'].dropna().unique())
-        selected_reconcile_date = st.selectbox("📆 按银行对账日期筛选（可选）", options=["全部"] + valid_dates)
-
-    if selected_reconcile_date != "全部":
-        grouped = grouped[grouped['银行对账日期'] == selected_reconcile_date]
 
 
-    if not grouped.empty:
-        def convert_df_to_excel(df_export):
-            export_df = df_export.copy()
+    # 仅保留 数字编号的 支票号码
+    # 只保留以数字开头的付款支票号（用正则表达式）
+    grouped = grouped[grouped['付款支票号'].astype(str).str.match(r'^\d')]
 
-            # 格式化日期
-            export_df['银行对账日期'] = pd.to_datetime(export_df['银行对账日期'], errors='coerce').dt.strftime('%Y-%m-%d')
+    # 新增一列提取支票号中的数字部分（用于排序）
+    # 我只要这个提取结果的“第 0 列”（也就是唯一那一列），并把它变成一个 Series。
+    # 如果你不写 [0]，提取结果就是个 DataFrame，不能直接赋值到某个 Series 列里，也没法 .astype(int)，程序会报错或行为不对。
+    grouped['支票号数字'] = grouped['付款支票号'].astype(str).str.extract(r'^(\d+)')[0].astype(int)
 
-            # 保留两位小数的金额列
-            for col in ['实际支付金额', 'TPS', 'TVQ', '税后金额']:
-                export_df[col] = pd.to_numeric(export_df[col], errors='coerce').round(2)
+    # 按照提取的数字部分进行排序
+    grouped = grouped.sort_values(by='支票号数字').drop(columns='支票号数字').reset_index(drop=True)
 
-            # ✅ 新增辅助匹配列：支票号数字部分 + 金额
-            # 提取数字部分：例如 CK889 → 889
-            export_df['辅助匹配列'] = export_df.apply(
-                lambda row: f"{''.join(filter(str.isdigit, str(row['付款支票号'])))}-{format(row['实际支付金额'], '.2f')}",
-                axis=1
-            )
+    desired_order = [
+        '付款支票号', '公司名称', '实际支付金额',
+        'TPS', 'TVQ', '税后金额',
+        '开支票日期', '银行对账日期',
+        '部门', '发票号', '发票金额'
+    ]
 
-            # 导出 Excel
-            buffer = io.BytesIO()
-            with pd.ExcelWriter(buffer, engine='xlsxwriter') as writer:
-                export_df.to_excel(writer, index=False, sheet_name='支票总账')
-                writer.close()
-            return buffer.getvalue()
+    # 重新排列列顺序，保留你指定的列
+    grouped = grouped.reindex(columns=desired_order)
 
 
-        excel_data = convert_df_to_excel(grouped)
+    # ✅ 选择筛选方式：radio 控件
+    filter_mode = st.radio("🧭 请选择筛选方式：", ["显示所有已开支票", "按银行对账日期显示已开支票"], index=0)
 
-        # ✅ 当前时间戳用于命名文件：如 20250606151515
-        timestamp_str = datetime.now().strftime('%Y%m%d%H%M%S')
-        file_name = f"支票总账_{timestamp_str}.xlsx"
+    # ✅ 分支 1：按财会年度筛选
+    if filter_mode == "显示所有已开支票":
 
-        with col_b:
-            st.download_button(
-                label="📥 下载当前支票数据",
-                data=excel_data,
-                file_name=file_name,
-                mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
-            )
-    # ✅ 数值支票号在前、文本支票号在后排序
-    def sort_key(val):
-        try:
-            return (0, int(val))
-        except:
-            return (1, str(val))
+        if df['发票日期'].notna().any():
+            min_date = df['发票日期'].min().strftime('%Y-%m-%d')
+            max_date = df['发票日期'].max().strftime('%Y-%m-%d')
+            st.info(f"📌 当前发票日期范围 {min_date} ~ {max_date}")
+        else:
+            st.warning("⚠️ 没有有效的发票日期")
+        #st.dataframe(grouped)
 
-    grouped = grouped.sort_values(by='付款支票号', key=lambda x: x.map(sort_key)).reset_index(drop=True)
+
+    # ✅ 分支 2：按银行对账日期显示已开支票
+    elif filter_mode == "按银行对账日期显示已开支票":
+        col_a, col_b = st.columns([2, 1])
+        with col_a:
+            valid_dates = sorted(grouped['银行对账日期'].dropna().unique())
+            selected_reconcile_date = st.selectbox("📆 按银行对账日期筛选（可选）", options=["全部"] + valid_dates)
+
+        if selected_reconcile_date != "全部":
+            grouped = grouped[grouped['银行对账日期'] == selected_reconcile_date]
+
+        #st.dataframe(grouped)
+
+
+        if not grouped.empty:
+            def convert_df_to_excel(df_export):
+                export_df = df_export.copy()
+
+                # 格式化日期
+                export_df['银行对账日期'] = pd.to_datetime(export_df['银行对账日期'], errors='coerce').dt.strftime('%Y-%m-%d')
+                export_df['开支票日期'] = pd.to_datetime(export_df['开支票日期'], errors='coerce').dt.strftime('%Y-%m-%d')
+
+                # 保留两位小数的金额列
+                for col in ['实际支付金额', 'TPS', 'TVQ', '税后金额']:
+                    export_df[col] = pd.to_numeric(export_df[col], errors='coerce').round(2)
+
+                # ✅ 新增辅助匹配列：支票号数字部分 + 金额
+                # 提取数字部分：例如 CK889 → 889
+                export_df['辅助匹配列'] = export_df.apply(
+                    lambda row: f"{''.join(filter(str.isdigit, str(row['付款支票号'])))}-{format(row['实际支付金额'], '.2f')}",
+                    axis=1
+                )
+
+                # 导出 Excel
+                buffer = io.BytesIO()
+                with pd.ExcelWriter(buffer, engine='xlsxwriter') as writer:
+                    export_df.to_excel(writer, index=False, sheet_name='支票总账')
+                    writer.close()
+                return buffer.getvalue()
+
+
+            excel_data = convert_df_to_excel(grouped)
+
+            # ✅ 当前时间戳用于命名文件：如 20250606151515
+            timestamp_str = datetime.now().strftime('%Y%m%d%H%M%S')
+            file_name = f"支票总账_{timestamp_str}.xlsx"
+
+            with col_b:
+                st.download_button(
+                    label="📥 下载当前支票数据",
+                    data=excel_data,
+                    file_name=file_name,
+                    mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+                )
+
 
     # ✅ 添加总计行
     total_row = pd.DataFrame([{
@@ -136,7 +147,8 @@ def cheque_ledger_query():
         'TPS': grouped['TPS'].sum(),
         'TVQ': grouped['TVQ'].sum(),
         '税后金额': grouped['税后金额'].sum(),
-        '银行对账日期': ''
+        '银行对账日期': '',
+        '开支票日期': '',
     }])
 
     grouped_table = pd.concat([grouped, total_row], ignore_index=True)
@@ -154,13 +166,6 @@ def cheque_ledger_query():
         "税后金额": round(grouped['税后金额'].sum(), 2),
     }
 
-    # 转换为 DataFrame（转置以便更好地展示）
-    #total_df = pd.DataFrame.from_dict(total_data, orient='index', columns=['金额'])
-    #total_df.index.name = '项目'
-
-    # 渲染为表格
-    #st.markdown("#### 💰 总计")
-    #st.table(total_df.style.format({'金额': '{:,.2f}'}))
 
 
 
