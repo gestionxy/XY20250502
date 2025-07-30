@@ -143,39 +143,46 @@ def cheque_ledger_query():
     elif filter_mode == "PPA / EFT / DEBIT 等自动过账":
 
         # 加载数据
-        df_ppa_eft_debit = load_supplier_data()
-        df_ppa_eft_debit_1 = load_supplier_data()
+        df_source = load_supplier_data()
 
-        # 转换日期字段
-        df_ppa_eft_debit_1['发票日期'] = pd.to_datetime(df_ppa_eft_debit_1['发票日期'], errors='coerce')
+        # 确保关键字段为字符串类型，避免后续处理报错
+        df_source['公司名称'] = df_source['公司名称'].astype(str)
+        df_source['付款支票号'] = df_source['付款支票号'].astype(str)
 
-        # 条件1：公司名称以 * 结尾
-        cond_company_star = df_ppa_eft_debit_1['公司名称'].str.endswith('*', na=False)
+        # 转换日期格式，便于后续过滤或展示
+        df_source['发票日期'] = pd.to_datetime(df_source['发票日期'], errors='coerce')
 
+        # -------------------------------
+        # ✅ 条件 1：公司名称以 "*" 结尾
+        # -------------------------------
+        cond_company_star = df_source['公司名称'].str.endswith('*', na=False)
+        df_condition_1 = df_source[cond_company_star].copy()
+        df_condition_1['来源'] = '公司名称以*结尾'
 
-        # 条件2：公司名称不以 * 结尾 且 付款支票号以字母开头
-
-        # 确保字段为字符串
-        df_ppa_eft_debit['公司名称'] = df_ppa_eft_debit['公司名称'].astype(str)
-        df_ppa_eft_debit['付款支票号'] = df_ppa_eft_debit['付款支票号'].astype(str)
-
-        # 去除付款支票号中逻辑无效的值（空、nan、none等）
+        # -------------------------------
+        # ✅ 条件 2：公司名称不以 "*" 结尾 且 支票号以字母开头
+        # 首先清除无效支票号（空字符串、'nan'、'none' 等）
+        # -------------------------------
         invalid_values = ['', 'nan', 'none']
-        df_ppa_eft_debit = df_ppa_eft_debit[
-            ~df_ppa_eft_debit['付款支票号'].str.strip().str.lower().isin(invalid_values)
-        ]
+        valid_cheque_mask = ~df_source['付款支票号'].str.strip().str.lower().isin(invalid_values)
 
+        # 再构造符合“支票号以字母开头”的条件，同时公司名称不能以 * 结尾
+        cond_cheque_alpha = df_source['付款支票号'].str.match(r'^[A-Za-z]', na=False)
+        cond_company_non_star = ~df_source['公司名称'].str.endswith('*', na=False)
 
-        cond_company_nonstar_and_cheque_alpha = (
-            ~df_ppa_eft_debit['公司名称'].str.endswith('*', na=False) &
-            df_ppa_eft_debit['付款支票号'].str.match(r'^[A-Za-z]', na=False)
-        )
+        cond_combined = valid_cheque_mask & cond_cheque_alpha & cond_company_non_star
+        df_condition_2 = df_source[cond_combined].copy()
+        df_condition_2['来源'] = '支票号字母开头'
 
-        # 合并条件（取并集）
-        combined_condition = cond_company_star | cond_company_nonstar_and_cheque_alpha
+        # -------------------------------
+        # ✅ 合并两个筛选结果作为最终数据集
+        # -------------------------------
+        df_filtered_PPA = pd.concat([df_condition_1, df_condition_2], ignore_index=True)
 
-        # 最终筛选后的数据集
-        df_filtered_PPA = df_ppa_eft_debit[combined_condition]
+        # 可选：显示记录数统计（调试用）
+        # st.write(f"公司名称以 * 结尾: {len(df_condition_1)} 条")
+        # st.write(f"支票号以字母开头 且 公司名称不以 * 结尾: {len(df_condition_2)} 条")
+        # st.write(f"最终合并记录总数: {len(df_filtered_PPA)} 条")
 
         # 如果筛选结果为空，给予提示
         if df_filtered_PPA.empty:
