@@ -144,12 +144,38 @@ def cheque_ledger_query():
 
         # 加载数据
         df_ppa_eft_debit = load_supplier_data()
+        df_ppa_eft_debit_1 = load_supplier_data()
 
         # 转换日期字段
-        df_ppa_eft_debit['发票日期'] = pd.to_datetime(df_ppa_eft_debit['发票日期'], errors='coerce')
+        df_ppa_eft_debit_1['发票日期'] = pd.to_datetime(df_ppa_eft_debit_1['发票日期'], errors='coerce')
 
-        # 仅筛选公司名称以 * 结尾的行
-        df_filtered_PPA = df_ppa_eft_debit[df_ppa_eft_debit['公司名称'].str.endswith('*', na=False)]
+        # 条件1：公司名称以 * 结尾
+        cond_company_star = df_ppa_eft_debit_1['公司名称'].str.endswith('*', na=False)
+
+
+        # 条件2：公司名称不以 * 结尾 且 付款支票号以字母开头
+
+        # 确保字段为字符串
+        df_ppa_eft_debit['公司名称'] = df_ppa_eft_debit['公司名称'].astype(str)
+        df_ppa_eft_debit['付款支票号'] = df_ppa_eft_debit['付款支票号'].astype(str)
+
+        # 去除付款支票号中逻辑无效的值（空、nan、none等）
+        invalid_values = ['', 'nan', 'none']
+        df_ppa_eft_debit = df_ppa_eft_debit[
+            ~df_ppa_eft_debit['付款支票号'].str.strip().str.lower().isin(invalid_values)
+        ]
+
+
+        cond_company_nonstar_and_cheque_alpha = (
+            ~df_ppa_eft_debit['公司名称'].str.endswith('*', na=False) &
+            df_ppa_eft_debit['付款支票号'].str.match(r'^[A-Za-z]', na=False)
+        )
+
+        # 合并条件（取并集）
+        combined_condition = cond_company_star | cond_company_nonstar_and_cheque_alpha
+
+        # 最终筛选后的数据集
+        df_filtered_PPA = df_ppa_eft_debit[combined_condition]
 
         # 如果筛选结果为空，给予提示
         if df_filtered_PPA.empty:
@@ -171,7 +197,7 @@ def cheque_ledger_query():
             df_filtered_PPA = df_filtered_PPA.loc[date_mask]
 
             # 提取并格式化要显示的字段
-            df_display = df_filtered_PPA[['公司名称', '部门', '发票号', '发票日期', '发票金额', 'TPS', 'TVQ']].copy()
+            df_display = df_filtered_PPA[['公司名称', '部门', '发票号', '发票日期', '发票金额', 'TPS', 'TVQ', '付款支票号']].copy()
             df_display['发票日期'] = df_display['发票日期'].dt.strftime('%Y-%m-%d')
             for col in ['发票金额', 'TPS', 'TVQ']:
                 df_display[col] = df_display[col].astype(float).map("{:.2f}".format)

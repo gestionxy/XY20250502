@@ -7,10 +7,10 @@ def render_sidebar():
     st.sidebar.markdown("<h3 style='color:red;'>新亚超市管理系统</h3>", unsafe_allow_html=True)
     
     # st.sidebar.radio()：在侧边栏添加一个单选按钮组
-    menu = st.sidebar.radio("🚀数据更新截止至：2025-07-28 18:06", 
+    menu = st.sidebar.radio("🚀数据更新截止至：2025-07-29 18:16", 
         # 每个选项代表一个功能模块，可以根据选择执行不同的业务逻辑
+        #删除 这个功能键 "应付未付账单查询(管理版)", 该功能转移至 gestionxy版本
         [
-        "应付未付账单查询(管理版)",
         "应付未付账单查询(会计版)",
         "付款支票信息查询",
         "当前支票总账",

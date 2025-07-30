@@ -33,8 +33,8 @@ refresh_triggered = render_refresh_button(load_supplier_data)
 selected = render_sidebar()
 
 # 根据选项运行对应功能
-if selected == "应付未付账单查询(管理版)":
-    ap_unpaid_query()
+#if selected == "应付未付账单查询(管理版)":
+    #ap_unpaid_query()
 
 
 if selected == "应付未付账单查询(会计版)":
