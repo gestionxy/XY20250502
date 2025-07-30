@@ -67,7 +67,7 @@ def cheque_ledger_query():
 
 
     # ✅ 选择筛选方式：radio 控件
-    filter_mode = st.radio("🧭 请选择筛选方式：", ["显示所有已开支票", "按银行对账日期显示已开支票"], index=0)
+    filter_mode = st.radio("🧭 请选择筛选方式：", ["显示所有已开支票", "按银行对账日期显示已开支票", "PPA / EFT / DEBIT 等自动过账"], index=0)
 
     # ✅ 分支 1：按财会年度筛选
     if filter_mode == "显示所有已开支票":
@@ -136,107 +136,159 @@ def cheque_ledger_query():
                 )
 
 
-    # ✅ 添加总计行
-    total_row = pd.DataFrame([{
-        '付款支票号': '总计',
-        '公司名称': '',
-        '部门': '',
-        '发票号': '',
-        '发票金额': '',
-        '实际支付金额': grouped['实际支付金额'].sum(),
-        'TPS': grouped['TPS'].sum(),
-        'TVQ': grouped['TVQ'].sum(),
-        '税后金额': grouped['税后金额'].sum(),
-        '银行对账日期': '',
-        '开支票日期': '',
-    }])
-
-    grouped_table = pd.concat([grouped, total_row], ignore_index=True)
 
 
-        # 先构造总计数据字典
-    total_data = {
-        #"实际支付金额": round(grouped.loc[grouped['付款支票号'] == '总计', '实际支付金额'].sum(), 2),
-        #"TPS": round(grouped.loc[grouped['付款支票号'] == '总计', 'TPS'].sum(), 2),
-        #"TVQ": round(grouped.loc[grouped['付款支票号'] == '总计', 'TVQ'].sum(), 2),
-        #"税后金额": round(grouped.loc[grouped['付款支票号'] == '总计', '税后金额'].sum(), 2),
-        "实际支付金额": round(grouped['实际支付金额'].sum(), 2),
-        "TPS": round(grouped['TPS'].sum(), 2),
-        "TVQ": round(grouped['TVQ'].sum(), 2),
-        "税后金额": round(grouped['税后金额'].sum(), 2),
-    }
+    # 增加PPA / ETF / DEBIT 账单查询窗口
+    # 满足 sui姐 关于自动转账的数据查询
+    elif filter_mode == "PPA / EFT / DEBIT 等自动过账":
 
+        # 加载数据
+        df_ppa_eft_debit = load_supplier_data()
 
+        # 转换日期字段
+        df_ppa_eft_debit['发票日期'] = pd.to_datetime(df_ppa_eft_debit['发票日期'], errors='coerce')
 
+        # 仅筛选公司名称以 * 结尾的行
+        df_filtered_PPA = df_ppa_eft_debit[df_ppa_eft_debit['公司名称'].str.endswith('*', na=False)]
 
-    # 构造 HTML + CSS 表格（卡片浮动样式）
-    html = f"""
-    <style>
-        .card {{
-            background-color: #ffffff;
-            padding: 20px;
-            border-radius: 12px;
-            box-shadow: 0 4px 12px rgba(0, 0, 0, 0.08);
-            width: 420px;
-            margin: 30px auto;
-            font-family: "Segoe UI", sans-serif;
-        }}
-        .summary-table {{
-            width: 100%;
-            border-collapse: collapse;
-            font-size: 15px;
-            background-color: #EAF2F8;
-            border-radius: 8px;
-            overflow: hidden;
-        }}
-        .summary-table th {{
-            background-color: #D6EAF8;
-            text-align: left;
-            padding: 10px;
-        }}
-        .summary-table td {{
-            padding: 10px;
-            border-top: 1px solid #D4E6F1;
-            text-align: right;
-        }}
-        .summary-table td:first-child {{
-            text-align: left;
-        }}
-    </style>
+        # 如果筛选结果为空，给予提示
+        if df_filtered_PPA.empty:
+            st.warning("没有找到公司名称以 * 结尾的数据。")
+        else:
+            # 获取发票日期的最小值和最大值
+            min_date = df_filtered_PPA['发票日期'].min()
+            max_date = df_filtered_PPA['发票日期'].max()
 
-    <div class="card">
-        <h3>💰 总计</h3>
-        <table class="summary-table">
-            <tr><th>项目</th><th>金额（元）</th></tr>
-            <tr><td>实际支付金额</td><td>{total_data['实际支付金额']:,.2f}</td></tr>
-            <tr><td>TPS</td><td>{total_data['TPS']:,.2f}</td></tr>
-            <tr><td>TVQ</td><td>{total_data['TVQ']:,.2f}</td></tr>
-            <tr><td>税后金额</td><td>{total_data['税后金额']:,.2f}</td></tr>
-        </table>
-    </div>
-    """
+            col1, col2 = st.columns(2)
+            with col1:
+                start_date = st.date_input("开始日期", value=min_date, min_value=min_date, max_value=max_date)
+            with col2:
+                end_date = st.date_input("结束日期", value=max_date, min_value=min_date, max_value=max_date)
 
-    # 渲染 HTML 内容
-    st.markdown(html, unsafe_allow_html=True)
-    
+            # 日期过滤
+            date_mask = (df_filtered_PPA['发票日期'] >= pd.to_datetime(start_date)) & \
+                        (df_filtered_PPA['发票日期'] <= pd.to_datetime(end_date))
+            df_filtered_PPA = df_filtered_PPA.loc[date_mask]
+
+            # 提取并格式化要显示的字段
+            df_display = df_filtered_PPA[['公司名称', '部门', '发票号', '发票日期', '发票金额', 'TPS', 'TVQ']].copy()
+            df_display['发票日期'] = df_display['发票日期'].dt.strftime('%Y-%m-%d')
+            for col in ['发票金额', 'TPS', 'TVQ']:
+                df_display[col] = df_display[col].astype(float).map("{:.2f}".format)
+
+            # 显示结果
+            st.dataframe(df_display, use_container_width=True)
     
 
 
-    # ✅ 设置样式
-    def highlight_total(row):
-        if row['付款支票号'] == '总计':
-            return ['background-color: #FADBD8'] * len(row)
-        return [''] * len(row)
+    # 为了让 自动过账PPA / EFT / DEBIT 的数据内容不显示 如下信息，我们设置一个if条件进行限制
+    # 如果不是 PPA / EFT / DEBIT 等自动过账，则显示下面的数据统计部分
+    if filter_mode != "PPA / EFT / DEBIT 等自动过账":
 
-    st.dataframe(
-        grouped_table.style
-        .apply(highlight_total, axis=1)
-        .format({
-            #'发票金额': '{:,.2f}',
-            '实际支付金额': '{:,.2f}',
-            'TPS': '{:,.2f}',
-            'TVQ': '{:,.2f}',
-            '税后金额': '{:,.2f}'
-        }),
-        use_container_width=True
-    )
+        # ✅ 添加总计行
+        total_row = pd.DataFrame([{
+            '付款支票号': '总计',
+            '公司名称': '',
+            '部门': '',
+            '发票号': '',
+            '发票金额': '',
+            '实际支付金额': grouped['实际支付金额'].sum(),
+            'TPS': grouped['TPS'].sum(),
+            'TVQ': grouped['TVQ'].sum(),
+            '税后金额': grouped['税后金额'].sum(),
+            '银行对账日期': '',
+            '开支票日期': '',
+        }])
+
+        grouped_table = pd.concat([grouped, total_row], ignore_index=True)
+
+
+            # 先构造总计数据字典
+        total_data = {
+            #"实际支付金额": round(grouped.loc[grouped['付款支票号'] == '总计', '实际支付金额'].sum(), 2),
+            #"TPS": round(grouped.loc[grouped['付款支票号'] == '总计', 'TPS'].sum(), 2),
+            #"TVQ": round(grouped.loc[grouped['付款支票号'] == '总计', 'TVQ'].sum(), 2),
+            #"税后金额": round(grouped.loc[grouped['付款支票号'] == '总计', '税后金额'].sum(), 2),
+            "实际支付金额": round(grouped['实际支付金额'].sum(), 2),
+            "TPS": round(grouped['TPS'].sum(), 2),
+            "TVQ": round(grouped['TVQ'].sum(), 2),
+            "税后金额": round(grouped['税后金额'].sum(), 2),
+        }
+
+
+
+
+        # 构造 HTML + CSS 表格（卡片浮动样式）
+        html = f"""
+        <style>
+            .card {{
+                background-color: #ffffff;
+                padding: 20px;
+                border-radius: 12px;
+                box-shadow: 0 4px 12px rgba(0, 0, 0, 0.08);
+                width: 420px;
+                margin: 30px auto;
+                font-family: "Segoe UI", sans-serif;
+            }}
+            .summary-table {{
+                width: 100%;
+                border-collapse: collapse;
+                font-size: 15px;
+                background-color: #EAF2F8;
+                border-radius: 8px;
+                overflow: hidden;
+            }}
+            .summary-table th {{
+                background-color: #D6EAF8;
+                text-align: left;
+                padding: 10px;
+            }}
+            .summary-table td {{
+                padding: 10px;
+                border-top: 1px solid #D4E6F1;
+                text-align: right;
+            }}
+            .summary-table td:first-child {{
+                text-align: left;
+            }}
+        </style>
+
+        <div class="card">
+            <h3>💰 总计</h3>
+            <table class="summary-table">
+                <tr><th>项目</th><th>金额（元）</th></tr>
+                <tr><td>实际支付金额</td><td>{total_data['实际支付金额']:,.2f}</td></tr>
+                <tr><td>TPS</td><td>{total_data['TPS']:,.2f}</td></tr>
+                <tr><td>TVQ</td><td>{total_data['TVQ']:,.2f}</td></tr>
+                <tr><td>税后金额</td><td>{total_data['税后金额']:,.2f}</td></tr>
+            </table>
+        </div>
+        """
+
+        # 渲染 HTML 内容
+        st.markdown(html, unsafe_allow_html=True)
+        
+        
+
+
+        # ✅ 设置样式
+        def highlight_total(row):
+            if row['付款支票号'] == '总计':
+                return ['background-color: #FADBD8'] * len(row)
+            return [''] * len(row)
+
+        st.dataframe(
+            grouped_table.style
+            .apply(highlight_total, axis=1)
+            .format({
+                #'发票金额': '{:,.2f}',
+                '实际支付金额': '{:,.2f}',
+                'TPS': '{:,.2f}',
+                'TVQ': '{:,.2f}',
+                '税后金额': '{:,.2f}'
+            }),
+            use_container_width=True
+        )
+
+
+
