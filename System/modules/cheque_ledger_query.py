@@ -85,7 +85,8 @@ def cheque_ledger_query():
     elif filter_mode == "按银行对账日期显示已开支票":
         col_a, col_b = st.columns([2, 1])
         with col_a:
-            valid_dates = sorted(grouped['银行对账日期'].dropna().unique())
+            valid_dates = sorted(grouped['银行对账日期'].dropna().unique(), reverse=True)
+
             selected_reconcile_date = st.selectbox("📆 按银行对账日期筛选（可选）", options=["全部"] + valid_dates)
 
         if selected_reconcile_date != "全部":
@@ -179,6 +180,8 @@ def cheque_ledger_query():
         # -------------------------------
         df_filtered_PPA = pd.concat([df_condition_1, df_condition_2], ignore_index=True)
 
+        df_filtered_PPA_avec_bankdate = df_filtered_PPA.copy()
+
         # 可选：显示记录数统计（调试用）
         # st.write(f"公司名称以 * 结尾: {len(df_condition_1)} 条")
         # st.write(f"支票号以字母开头 且 公司名称不以 * 结尾: {len(df_condition_2)} 条")
@@ -211,7 +214,73 @@ def cheque_ledger_query():
 
             # 显示结果
             st.dataframe(df_display, use_container_width=True)
-    
+        
+
+
+
+
+        # 假设 df_filtered_PPA_avec_bankdate 已经准备好
+        st.title("📅 PPA银行对账日期筛选与合并查看")
+
+        # 确保日期列为 datetime 类型
+        df_filtered_PPA_avec_bankdate["银行对账日期"] = pd.to_datetime(df_filtered_PPA_avec_bankdate["银行对账日期"], errors='coerce')
+        df_filtered_PPA_avec_bankdate["发票日期"] = pd.to_datetime(df_filtered_PPA_avec_bankdate["发票日期"], errors='coerce')
+
+        # 获取唯一日期，并按从大到小排序
+        date_options = sorted(df_filtered_PPA_avec_bankdate["银行对账日期"].dropna().unique(), reverse=True)
+        selected_date = st.selectbox("请选择银行对账日期：", options=date_options, format_func=lambda x: x.strftime("%Y-%m-%d"))
+
+        if selected_date:
+            # 筛选该日期下数据
+            filtered_df = df_filtered_PPA_avec_bankdate[df_filtered_PPA_avec_bankdate["银行对账日期"] == selected_date]
+
+            # 获取每组的最早发票日期，单独处理
+            earliest_invoice_date = (
+                filtered_df
+                .groupby("付款支票号")["发票日期"]
+                .min()
+                .rename("最早发票日期")
+            )
+
+            # 执行合并与聚合
+            grouped = filtered_df.groupby("付款支票号").agg({
+                "发票金额": "sum",
+                "TPS": "sum",
+                "TVQ": "sum",
+                "公司名称": "first",
+                "部门": "first",
+                "发票号": lambda x: ','.join(x.astype(str).dropna().unique()),
+                "发票日期": lambda x: ','.join(x.dropna().dt.strftime("%Y-%m-%d").unique()),
+            }).reset_index()
+
+            # 合并最早发票日期（用于排序）
+            grouped = grouped.merge(earliest_invoice_date.reset_index(), on="付款支票号", how="left")
+
+            # 排序
+            grouped = grouped.sort_values(by=["公司名称", "最早发票日期"], ascending=[True, True])
+
+            # 格式化
+            grouped["发票金额"] = grouped["发票金额"].round(2)
+            grouped["TPS"] = grouped["TPS"].round(2)
+            grouped["TVQ"] = grouped["TVQ"].round(2)
+            grouped["发票日期"] = grouped["发票日期"].astype(str)
+            grouped["最早发票日期"] = grouped["最早发票日期"].dt.strftime("%Y-%m-%d")
+            grouped = grouped.reset_index(drop=True)
+
+            # 输出最终结果
+            final_df = grouped[["公司名称", "部门", "发票号", "发票日期", "发票金额", "TPS", "TVQ"]]
+            #final_df.columns = ["公司名称", "部门", "发票号", "发票日期", "发票金额", "TPS", "TVQ"]
+
+            st.success("✅ 筛选与合并结果如下：")
+            st.dataframe(final_df, use_container_width=True)
+
+
+
+
+
+
+
+
 
 
     # 为了让 自动过账PPA / EFT / DEBIT 的数据内容不显示 如下信息，我们设置一个if条件进行限制
