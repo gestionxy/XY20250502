@@ -184,11 +184,11 @@ def ap_unpaid_query_compta():
 
 
     # ✅ 部门选择下拉框
-    purchase_departments = ['冻部', '厨房', '杂货', '肉部', '蔬菜', '美妆', '酒水', '面包', '鱼部', '牛奶生鲜']
-    dept_choice = st.selectbox("🏷️ 请选择部门类型", ['全部', '采购类: 冻部 / 厨房 / 杂货 / 肉部 / 蔬菜 / 美妆 / 酒水 / 面包 / 鱼部 / 牛奶生鲜'])
+    purchase_departments = ['冻部', '厨房', '杂货', '肉部', '菜部', '美妆', '酒水', '面包', '鱼部', '牛奶生鲜']
+    dept_choice = st.selectbox("🏷️ 请选择部门类型", ['全部', '采购类: 冻部 / 厨房 / 杂货 / 肉部 / 菜部 / 美妆 / 酒水 / 面包 / 鱼部 / 牛奶生鲜'])
 
     # ✅ 根据部门类型进一步筛选
-    if dept_choice == '采购类: 冻部 / 厨房 / 杂货 / 肉部 / 蔬菜 / 美妆 / 酒水 / 面包 / 鱼部 / 牛奶生鲜':
+    if dept_choice == '采购类: 冻部 / 厨房 / 杂货 / 肉部 / 菜部 / 美妆 / 酒水 / 面包 / 鱼部 / 牛奶生鲜':
         filtered_df = filtered_df[filtered_df['部门'].isin(purchase_departments)]
 
 
