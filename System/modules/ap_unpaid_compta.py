@@ -262,6 +262,8 @@ def ap_unpaid_query_compta():
     )
 
 
+    st.dataframe(df_show)
+
 
 
 
