@@ -74,7 +74,15 @@ def ap_unpaid_query_compta():
     # ✅ 条件1：公司名称以 * 结尾
     # 公司名称以 * 结尾， 都是PPA / DEBIT / EFT 等支付方式，我们默认他们是自动扣款
     # 扣款规则：当天扣款，+7 天 银行过账
-    mask_star = df['公司名称'].astype(str).str.endswith("*")
+    #mask_star = df['公司名称'].astype(str).str.endswith("*")
+    
+    # 如果 银行对账日期 有值 → 保持原始数据，不额外筛选。
+    # 如果 银行对账日期 为空 → 才检查 公司名称以 * 结尾，并筛选出来。
+    mask_star = (
+        df['银行对账日期'].isna() 
+        & df['公司名称'].astype(str).str.endswith('*')
+    )
+
 
     # ✅ 条件2：公司名称中不含 * 且付款支票号以字母开头
     # 这类公司相对少见，如 consco， 有的是以 ETF 支付，有的是支票，此部分专门处理这些内容
@@ -115,7 +123,6 @@ def ap_unpaid_query_compta():
 
 
 
-
     # 安全检查
     min_date = df['发票日期'].min()
     max_date = df['发票日期'].max()
@@ -152,12 +159,20 @@ def ap_unpaid_query_compta():
         )
 
     with col2:
-        end_date = st.selectbox(
-            "🔴 结束日期（每月25号）",
-            options=end_dates,
-            format_func=lambda x: x.strftime('%Y-%m-%d'),
-            index=len(end_dates) - 1  # 默认选择最大值
+        selected_option = st.selectbox(
+            "🔴 结束日期（每月25号 或 自定义）",
+            options= ["自定义日期"] + end_dates,
+            format_func=lambda x: x.strftime('%Y-%m-%d') if isinstance(x, pd.Timestamp) else str(x),
+            index=len(end_dates) - 1
         )
+
+        if selected_option == "自定义日期":
+            end_date = st.date_input("📅 请选择自定义结束日期")
+            end_date = pd.to_datetime(end_date)  # ✅ 统一为 Timestamp
+        else:
+            end_date = selected_option
+
+
 
     # ✅ 初步筛选日期范围
     if start_date > end_date:
@@ -165,6 +180,8 @@ def ap_unpaid_query_compta():
         st.stop()
 
     filtered_df = df[(df['发票日期'] >= start_date) & (df['发票日期'] <= end_date)]
+
+
 
     # ✅ 部门选择下拉框
     purchase_departments = ['冻部', '厨房', '杂货', '肉部', '蔬菜', '美妆', '酒水', '面包', '鱼部', '牛奶生鲜']
@@ -178,7 +195,7 @@ def ap_unpaid_query_compta():
     # ✅ 同步原始金额
     filtered_df['银行实际支付金额'] = df['实际支付金额']
 
-    # ✅ 1. 条件判断：银行对账日期为空或晚于用户选定的结束日期，则记为未支付
+    # ✅ 1. 条件判断：银行对账日期为空或晚于用户选定的结束日期，则记为未支付,标记为0
     filtered_df['银行实际支付金额'] = filtered_df.apply(
         lambda row: 0 if pd.isna(row['银行对账日期']) or row['银行对账日期'] > end_date else row['实际支付金额'],
         axis=1
@@ -186,6 +203,73 @@ def ap_unpaid_query_compta():
 
     # ✅ 2. 新增字段：应付未付额AP
     filtered_df['应付未付额AP'] = filtered_df['发票金额'] - filtered_df['银行实际支付金额']
+
+
+
+
+
+
+    # 仅保留并按顺序展示这些列
+    cols = [
+        '公司名称','部门','发票号','发票日期','发票金额','TPS','TVQ',
+        '付款支票号','实际支付金额','付款支票总额','开支票日期',
+        '银行对账日期','银行假定过账日期','银行实际支付金额','应付未付额AP'
+    ]
+    existing_cols = [c for c in cols if c in filtered_df.columns]
+    df_show = filtered_df.loc[:, existing_cols].copy()
+
+    # 定义日期列和数值列
+    date_cols = ['发票日期','开支票日期','银行对账日期','银行假定过账日期']
+    num_cols  = ['发票金额','TPS','TVQ','实际支付金额','付款支票总额','银行实际支付金额','应付未付额AP']
+
+    # 统一为 datetime（显示时用 YYYY-MM-DD）
+    for c in [x for x in date_cols if x in df_show.columns]:
+        try:
+            df_show[c] = pd.to_datetime(df_show[c], errors='coerce').dt.tz_localize(None)
+        except TypeError:
+            df_show[c] = pd.to_datetime(df_show[c], errors='coerce')
+
+    # 数值列转数值并保留两位小数
+    for c in [x for x in num_cols if x in df_show.columns]:
+        df_show[c] = pd.to_numeric(df_show[c], errors='coerce').round(2)
+
+    st.info("数据 银行对账 处理完成，请查看结果。")
+
+    # 去除 应付未付额AP 为空的数据以及等于0的数据
+    # 转成数值并保留两位小数
+    df_show1 = df_show.copy() 
+    df_show1['应付未付额AP'] = pd.to_numeric(df_show1['应付未付额AP'], errors='coerce').round(2)
+    # 去除为空和等于 0 的行
+    df_show1 = df_show1[df_show1['应付未付额AP'].notna() & (df_show1['应付未付额AP'] != 0)]
+
+
+    st.success(
+        f"📋 共筛选出 {len(df_show1)} 条记录，"
+        f"发票总金额：{filtered_df['发票金额'].sum():,.2f}，"
+        f"银行实际支付金额：{filtered_df['银行实际支付金额'].sum():,.2f}，"
+        f"应付未付额AP：{filtered_df['应付未付额AP'].sum():,.2f}"
+    )
+
+
+    # 用 column_config 控制显示格式（日期 yyyy-mm-dd，数值保留两位）
+    st.dataframe(
+        df_show1,
+        use_container_width=True,
+        column_config={
+            **{c: st.column_config.DateColumn(format="YYYY-MM-DD") for c in date_cols if c in df_show.columns},
+            **{c: st.column_config.NumberColumn(format="%.2f") for c in num_cols if c in df_show.columns},
+        }
+    )
+
+
+
+
+
+
+
+
+
+
 
     # ✅ 3. 汇总（按部门）
     grouped_df = filtered_df.groupby('部门', as_index=False)[
