@@ -251,19 +251,29 @@ def ap_unpaid_query_compta():
     )
 
 
+    st.info("仅包含 应付未付额AP ")
     # 用 column_config 控制显示格式（日期 yyyy-mm-dd，数值保留两位）
     st.dataframe(
         df_show1,
+        use_container_width=True,
+        column_config={
+            **{c: st.column_config.DateColumn(format="YYYY-MM-DD") for c in date_cols if c in df_show1.columns},
+            **{c: st.column_config.NumberColumn(format="%.2f") for c in num_cols if c in df_show1.columns},
+        }
+    )
+
+
+
+    st.info("完整数据")
+    # 用 column_config 控制显示格式（日期 yyyy-mm-dd，数值保留两位）
+    st.dataframe(
+        df_show,
         use_container_width=True,
         column_config={
             **{c: st.column_config.DateColumn(format="YYYY-MM-DD") for c in date_cols if c in df_show.columns},
             **{c: st.column_config.NumberColumn(format="%.2f") for c in num_cols if c in df_show.columns},
         }
     )
-
-
-    st.dataframe(df_show)
-
 
 
 
