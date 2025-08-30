@@ -71,40 +71,72 @@ def ap_unpaid_query_compta():
 
 
 
-    # ✅ 条件1：公司名称以 * 结尾
-    # 公司名称以 * 结尾， 都是PPA / DEBIT / EFT 等支付方式，我们默认他们是自动扣款
-    # 扣款规则：当天扣款，+7 天 银行过账
-    #mask_star = df['公司名称'].astype(str).str.endswith("*")
-    
-    # 如果 银行对账日期 有值 → 保持原始数据，不额外筛选。
-    # 如果 银行对账日期 为空 → 才检查 公司名称以 * 结尾，并筛选出来。
+    # ——————————————— 目的说明 ———————————————
+    # 1) 条件1（mask_star）：
+    #    仅在「银行对账日期为空」时，才对「公司名称以 * 结尾」的记录进行自动规则处理；
+    #    若该行已有银行对账日期，则视为已对账/已确定，不做改动。
+    # 2) 条件2（mask_no_star_and_letter_cheque）：
+    #    仅在「开支票日期为空」时，才对「公司名不含 * 且 付款支票号以字母开头」的记录处理；
+    #    若该行已有开支票日期，尊重原始数据，不覆盖。
+    # 3) 合并条件（mask_target = 条件1 or 条件2），对命中的行：
+    #    - 若开支票日期为空：设置 开支票日期 = 发票日期
+    #    - 设置 银行假定过账日期 = 开支票日期 + 7 天
+    #    - 用 calculate_reconcile_date(银行假定过账日期) 推导 银行对账日期
+    #    注：全部用 df.loc[...] 进行就地赋值，避免 SettingWithCopyWarning。
+
+    # ===================== 条件 1 =====================
+    # 银行对账日期为空 & 公司名称以 * 结尾
+    # - .isna()：仅挑出“银行对账日期为空”的行（为空才需要我们推导）。
+    # - .astype(str).str.endswith('*')：对公司名按字面检查是否以星号结尾。
     mask_star = (
-        df['银行对账日期'].isna() 
+        df['银行对账日期'].isna()
         & df['公司名称'].astype(str).str.endswith('*')
     )
 
-
-    # ✅ 条件2：公司名称中不含 * 且付款支票号以字母开头
-    # 这类公司相对少见，如 consco， 有的是以 ETF 支付，有的是支票，此部分专门处理这些内容
+    # ===================== 条件 2 =====================
+    # 公司名不含 *、付款支票号非空/非'nan'类占位、且“以字母开头”、并且“开支票日期为空”
+    # - str.contains(r'\*', na=False)：正则匹配星号，需转义 \*；na=False 让 NaN 当作不含 *（返回 False），防止 NaN 传播。
+    # - ~ ... .isin(['', 'nan', 'none', 'null'])：把空串与常见“空值字符串”排除（如 'nan','none','null' 等）。
+    # - str.match(r'^[A-Za-z]', na=False)：支票号首字符为字母；na=False 让空值返回 False。
+    # - df['开支票日期'].isna()：若已有开支票日期，尊重原始数据，不重复/不覆盖。
     mask_no_star_and_letter_cheque = (
-        (~df['公司名称'].astype(str).str.contains(r'\*')) &
-        (~df['付款支票号'].astype(str).str.strip().str.lower().isin(['', 'nan', 'none', 'null'])) &
-        (df['付款支票号'].astype(str).str.match(r'^[A-Za-z]'))
+        ~df['公司名称'].astype(str).str.contains(r'\*', na=False)
+        & ~df['付款支票号'].astype(str).str.strip().str.lower().isin(['', 'nan', 'none', 'null'])
+        & df['付款支票号'].astype(str).str.match(r'^[A-Za-z]', na=False)
+        & df['开支票日期'].isna()
     )
 
-
-
-    # ✅ 合并条件
+    # ===================== 合并目标行 =====================
+    # 逻辑“或”合并：满足 条件1 或 条件2 的任意一条即可进入后续处理。
     mask_target = mask_star | mask_no_star_and_letter_cheque
 
-    # ✅ 设置开支票日期 = 发票日期（仅对目标行）
-    df.loc[mask_target, '开支票日期'] = df.loc[mask_target, '发票日期']
+    # ===================== 设置开支票日期（仅空值时） =====================
+    # 仅对【目标行】且【开支票日期为空】的行赋值：开支票日期 = 发票日期
+    # 说明：
+    # - 与 mask_target 联合，保证只处理需要的行；
+    # - 再与 df['开支票日期'].isna() 联合，避免覆盖已有的开支票日期（尊重原始数据）。
+    df.loc[mask_target & df['开支票日期'].isna(), '开支票日期'] = df.loc[
+        mask_target & df['开支票日期'].isna(), '发票日期'
+    ]
 
-    # ✅ 新增一列：银行假定过账日期 = 开支票日期 + 7天
-    df.loc[mask_target, '银行假定过账日期'] = df.loc[mask_target, '开支票日期'] + pd.Timedelta(days=7)
+    # ===================== 计算“银行假定过账日期” =====================
+    # 对【目标行】：银行假定过账日期 = 开支票日期 + 7 天
+    # 说明：
+    # - 若开支票日期不是 datetime 类型，先用 pd.to_datetime(...) 做容错转换，
+    #   再加 Timedelta，避免类型不匹配错误（如字符串与 Timedelta 相加）。
+    df.loc[mask_target, '银行假定过账日期'] = (
+        pd.to_datetime(df.loc[mask_target, '开支票日期'], errors='coerce') + pd.Timedelta(days=7)
+    )
 
-    # ✅ 使用现有函数 calculate_reconcile_date 赋值银行对账日期
-    df.loc[mask_target, '银行对账日期'] = df.loc[mask_target, '银行假定过账日期'].apply(calculate_reconcile_date)
+    # ===================== 计算“银行对账日期” =====================
+    # 对【目标行】：根据“银行假定过账日期”计算“银行对账日期”。
+    # 说明：
+    # - calculate_reconcile_date(日期) 通常用于把 +7 天后的日期“对齐”为银行实际过账日，
+    #   比如跳过周末/法定假日等（具体取决于你自定义的函数逻辑）。
+    df.loc[mask_target, '银行对账日期'] = df.loc[mask_target, '银行假定过账日期'].apply(
+        calculate_reconcile_date
+    )
+
 
 
     # ✅ 条件3：开支票日期 <= 2025-04-20 且 银行对账日期为空
