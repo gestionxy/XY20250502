@@ -38,7 +38,7 @@ def ap_unpaid_query_compta():
     #df = df[df['部门'].isin(selected_departments)].reset_index(drop=True)
         
     # 1.1 首先排除出 直接用信用卡VISA-1826 进行支付的，信用卡支付的不是公司支票账户
-    df = df[~df['公司名称'].isin(['SLEEMAN', 'Arc-en-ciel','Ferme vallee verte'])]
+    df = df[~df['公司名称'].isin(['SLEEMAN', 'Arc-en-ciel','Ferme vallee verte*'])]
 
     # -------------------------------
     # 2. 日期字段转换为 datetime 类型（一次性）
