@@ -244,7 +244,8 @@ def cheque_ledger_query():
 
             # 执行合并与聚合
             grouped = filtered_df.groupby("付款支票号").agg({
-                "发票金额": "sum",
+                #"发票金额": "sum",
+                "实际支付金额": "sum",
                 "TPS": "sum",
                 "TVQ": "sum",
                 "公司名称": "first",
@@ -260,7 +261,8 @@ def cheque_ledger_query():
             grouped = grouped.sort_values(by=["公司名称", "最早发票日期"], ascending=[True, True])
 
             # 格式化
-            grouped["发票金额"] = grouped["发票金额"].round(2)
+            #grouped["发票金额"] = grouped["发票金额"].round(2)
+            grouped["实际支付金额"] = grouped["实际支付金额"].round(2)
             grouped["TPS"] = grouped["TPS"].round(2)
             grouped["TVQ"] = grouped["TVQ"].round(2)
             grouped["发票日期"] = grouped["发票日期"].astype(str)
@@ -268,8 +270,12 @@ def cheque_ledger_query():
             grouped = grouped.reset_index(drop=True)
 
             # 输出最终结果
-            final_df = grouped[["公司名称", "部门", "发票号", "发票日期", "发票金额", "TPS", "TVQ"]]
+            final_df = grouped[["公司名称", "部门", "发票号", "发票日期", "实际支付金额", "TPS", "TVQ"]]
             #final_df.columns = ["公司名称", "部门", "发票号", "发票日期", "发票金额", "TPS", "TVQ"]
+
+            cols_to_format = ["实际支付金额", "TPS", "TVQ"]
+            final_df[cols_to_format] = final_df[cols_to_format].apply(lambda x: x.map("{:.2f}".format))
+
 
             st.success("✅ 筛选与合并结果如下：")
             st.dataframe(final_df, use_container_width=True)
