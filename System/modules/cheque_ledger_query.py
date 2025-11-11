@@ -250,7 +250,7 @@ def cheque_ledger_query():
                 "TVQ": "sum",
                 "公司名称": "first",
                 "部门": "first",
-                "发票号": lambda x: ','.join(x.astype(str).dropna().unique()),
+                "发票号": lambda x: ';'.join(x.astype(str).dropna().unique()),
                 "发票日期": lambda x: ','.join(x.dropna().dt.strftime("%Y-%m-%d").unique()),
             }).reset_index()
 
