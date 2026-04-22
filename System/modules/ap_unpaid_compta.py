@@ -155,12 +155,40 @@ def ap_unpaid_query_compta():
 
 
 
+    # # 安全检查
+    # min_date = df['发票日期'].min()
+    # max_date = df['发票日期'].max()
+    # if pd.isna(min_date) or pd.isna(max_date):
+    #     st.warning("⚠️ 发票日期无效，无法生成筛选日期。")
+    #     st.stop()
+
+    # # ✅ 构建每月1号作为起始日期选项
+    # start_dates = pd.date_range(
+    #     start=min_date.replace(day=1),
+    #     end=(max_date + pd.DateOffset(months=1)).replace(day=1),
+    #     freq='MS'
+    # ).to_list()
+
+    # # ✅ 构建每月25号作为结束日期选项（从下月起）
+    # first_end_date = (min_date + pd.DateOffset(months=1)).replace(day=25)
+    # last_end_date = (max_date + pd.DateOffset(months=1)).replace(day=25)
+    # end_dates = pd.date_range(
+    #     start=first_end_date,
+    #     end=last_end_date,
+    #     freq='M'
+    # ).to_list()
+    # end_dates = [d.replace(day=25) for d in end_dates]
+
     # 安全检查
     min_date = df['发票日期'].min()
     max_date = df['发票日期'].max()
     if pd.isna(min_date) or pd.isna(max_date):
         st.warning("⚠️ 发票日期无效，无法生成筛选日期。")
         st.stop()
+
+    # 统一转成 datetime，防止类型不稳
+    min_date = pd.to_datetime(min_date)
+    max_date = pd.to_datetime(max_date)
 
     # ✅ 构建每月1号作为起始日期选项
     start_dates = pd.date_range(
@@ -169,15 +197,16 @@ def ap_unpaid_query_compta():
         freq='MS'
     ).to_list()
 
-    # ✅ 构建每月25号作为结束日期选项（从下月起）
+    # ✅ 构建每月25号作为结束日期选项（稳定版：不再用 freq='M'）
     first_end_date = (min_date + pd.DateOffset(months=1)).replace(day=25)
     last_end_date = (max_date + pd.DateOffset(months=1)).replace(day=25)
-    end_dates = pd.date_range(
-        start=first_end_date,
-        end=last_end_date,
-        freq='M'
-    ).to_list()
-    end_dates = [d.replace(day=25) for d in end_dates]
+
+    end_dates = []
+    current = first_end_date
+
+    while current <= last_end_date:
+        end_dates.append(current)
+        current = (current + pd.DateOffset(months=1)).replace(day=25)
 
     # ✅ Streamlit UI 美化 - 两栏并排显示
     col1, col2 = st.columns(2)
